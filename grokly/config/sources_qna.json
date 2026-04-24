@@ -1,0 +1,16 @@
+{
+  "description": "Forum Q&A seed data configuration",
+  "version": "1.0",
+  "sources": [
+    {
+      "name": "erpnext_forum",
+      "enabled": true,
+      "description": "Curated ERPNext Q&A pairs",
+      "ingester": "grokly.ingestion.forum_ingester",
+      "metadata": {
+        "source_label": "forum",
+        "file_type": "forum_qa"
+      }
+    }
+  ]
+}

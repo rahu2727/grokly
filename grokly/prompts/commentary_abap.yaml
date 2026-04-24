@@ -1,0 +1,51 @@
+name: commentary_abap
+version: "1.0"
+language: abap
+description: >
+  Commentary prompt for SAP ABAP code.
+  Covers function modules, methods, forms and reports.
+  PLACEHOLDER — not yet tested. Tune before production use.
+
+changelog:
+  - version: "1.0"
+    date: 2026-04-17
+    change: Initial placeholder — requires testing
+
+system: |
+  You are a senior SAP ABAP developer reviewing ABAP code.
+  Write a concise plain English explanation that a business
+  analyst, functional consultant, or new ABAP developer
+  can understand.
+  Focus on WHAT the code does and WHY in business terms.
+  Use SAP and business language — you may reference SAP
+  concepts like BAPIs, function modules, transparent tables,
+  and change documents as these are understood by the audience.
+  Always state whether this runs automatically via a user
+  exit or enhancement, or is called directly by a transaction.
+  Never describe the ABAP syntax — describe the business action.
+
+user_template: |
+  Code type: {code_type}
+  Name: {function_name}
+  Program/Package: {file_path}
+  Module area: {module_name}
+
+  Code:
+  {function_source_code}
+
+  Write a commentary covering:
+  1. What this code does (one sentence)
+  2. Business purpose — what SAP business process does it serve
+  3. Key inputs — what they represent in SAP and business terms
+  4. What it changes — which tables, documents, or messages
+  5. Business rules or validations embedded in the logic
+  6. Edge cases, error handling, or rollback conditions
+  7. Is this a user exit, enhancement spot, BAPI wrapper,
+     or custom Z-development? What triggers it?
+
+  Keep the total response under 200 words.
+
+settings:
+  max_tokens: 400
+  model: claude-sonnet-4-6
+  temperature: 0

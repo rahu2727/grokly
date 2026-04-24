@@ -1,0 +1,86 @@
+{
+  "description": "Source code repositories and modules to ingest",
+  "version": "1.0",
+  "clone_settings": {
+    "depth": 1,
+    "extra_git_config": "core.protectNTFS=false",
+    "timeout_seconds": 300
+  },
+  "chunking": {
+    "min_function_lines": 5,
+    "skip_dunder_methods": true,
+    "skip_test_functions": true,
+    "max_functions_per_file": 200
+  },
+  "repositories": [
+    {
+      "name": "erpnext_main",
+      "enabled": true,
+      "clone_url": "https://github.com/frappe/erpnext.git",
+      "local_path": "data/erpnext_repo",
+      "description": "Main ERPNext application repository",
+      "modules": [
+        {
+          "name": "buying",
+          "enabled": true,
+          "path": "erpnext/buying",
+          "description": "Purchase orders and supplier management"
+        },
+        {
+          "name": "projects",
+          "enabled": true,
+          "path": "erpnext/projects",
+          "description": "Project management and timesheets"
+        },
+        {
+          "name": "accounts",
+          "enabled": false,
+          "path": "erpnext/accounts",
+          "description": "Financial accounting — disabled, too large for demo"
+        },
+        {
+          "name": "stock",
+          "enabled": false,
+          "path": "erpnext/stock",
+          "description": "Inventory management — disabled, too large for demo"
+        }
+      ]
+    },
+    {
+      "name": "frappe_hrms",
+      "enabled": true,
+      "clone_url": "https://github.com/frappe/hrms.git",
+      "local_path": "data/hrms_repo",
+      "description": "Frappe HRMS — HR and Payroll modules",
+      "modules": [
+        {
+          "name": "hr",
+          "enabled": true,
+          "path_candidates": [
+            "hrms/hr",
+            "hrms/hrms/hr",
+            "hr"
+          ],
+          "description": "Leave management, expense claims, employee"
+        },
+        {
+          "name": "payroll",
+          "enabled": true,
+          "path_candidates": [
+            "hrms/payroll",
+            "hrms/hrms/payroll",
+            "payroll"
+          ],
+          "description": "Payroll processing and salary components"
+        }
+      ]
+    }
+  ],
+  "commentary_agent": {
+    "enabled": true,
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 400,
+    "api_delay_seconds": 0.5,
+    "cost_warning_threshold_usd": 5.00
+  }
+}

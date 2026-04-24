@@ -1,0 +1,16 @@
+anthropic
+langchain
+langgraph
+langsmith
+chromadb
+sentence-transformers
+tavily-python
+python-dotenv
+requests
+beautifulsoup4
+streamlit
+fastapi
+uvicorn
+pydantic
+mcp
+pyyaml

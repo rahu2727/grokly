@@ -1,0 +1,68 @@
+{
+  "description": "Documentation URLs to crawl",
+  "version": "1.0",
+  "crawl_settings": {
+    "delay_seconds": 1.5,
+    "timeout_seconds": 30,
+    "user_agent": "Mozilla/5.0 (Grokly research bot)",
+    "min_text_length": 300
+  },
+  "sources": [
+    {
+      "name": "frappe_hr_docs",
+      "enabled": true,
+      "base_url": "https://docs.frappe.io",
+      "urls": [
+        "https://docs.frappe.io/hr/expense-claim",
+        "https://docs.frappe.io/hr/leave-application",
+        "https://docs.frappe.io/hr/salary-slip",
+        "https://docs.frappe.io/hr/payroll-entry",
+        "https://docs.frappe.io/hr/employee",
+        "https://docs.frappe.io/hr/attendance",
+        "https://docs.frappe.io/hr/leave-type",
+        "https://docs.frappe.io/hr/leave-policy",
+        "https://docs.frappe.io/hr/leave-allocation",
+        "https://docs.frappe.io/hr/leave-encashment"
+      ],
+      "metadata": {
+        "source_label": "docs",
+        "module": "hr"
+      }
+    },
+    {
+      "name": "frappe_erpnext_docs",
+      "enabled": true,
+      "base_url": "https://docs.frappe.io",
+      "urls": [
+        "https://docs.frappe.io/erpnext/purchase-invoice",
+        "https://docs.frappe.io/erpnext/sales-invoice",
+        "https://docs.frappe.io/erpnext/journal-entry",
+        "https://docs.frappe.io/erpnext/bank-reconciliation",
+        "https://docs.frappe.io/erpnext/payment-entry",
+        "https://docs.frappe.io/erpnext/chart-of-accounts",
+        "https://docs.frappe.io/erpnext/purchase-order",
+        "https://docs.frappe.io/erpnext/material-request",
+        "https://docs.frappe.io/erpnext/supplier-quotation",
+        "https://docs.frappe.io/erpnext/request-for-quotation",
+        "https://docs.frappe.io/erpnext/stock-entry",
+        "https://docs.frappe.io/erpnext/warehouse",
+        "https://docs.frappe.io/erpnext/stock-reconciliation",
+        "https://docs.frappe.io/erpnext/delivery-note",
+        "https://docs.frappe.io/erpnext/purchase-receipt",
+        "https://docs.frappe.io/erpnext/project",
+        "https://docs.frappe.io/erpnext/task",
+        "https://docs.frappe.io/erpnext/timesheet",
+        "https://docs.frappe.io/erpnext/lead",
+        "https://docs.frappe.io/erpnext/opportunity",
+        "https://docs.frappe.io/erpnext/workflows",
+        "https://docs.frappe.io/erpnext/email-account",
+        "https://docs.frappe.io/erpnext/user-permissions",
+        "https://docs.frappe.io/erpnext/print-format"
+      ],
+      "metadata": {
+        "source_label": "docs",
+        "module": "erpnext"
+      }
+    }
+  ]
+}

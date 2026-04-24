@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")",
+      "Bash(python3 -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")",
+      "Bash(py -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")"
+    ]
+  }
+}
