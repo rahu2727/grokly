@@ -10,12 +10,15 @@ Responsibilities:
 """
 
 import json
+import logging
 
 import anthropic
 from dotenv import load_dotenv
 
 from grokly.pipeline.state import GroklyState
 from grokly.pipeline.tools import TOOL_DEFINITIONS, execute_tool
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -106,6 +109,15 @@ def tracker_node(state: GroklyState) -> dict:
         if confidence >= 0.6:
             break
 
+    # Last resort: if confidence is still low, try MCP web search
+    if confidence < 0.6:
+        chunks, tool_calls_made = _try_web_search_via_mcp(
+            question, chunks, tool_calls_made
+        )
+        distances = [c.get("distance", 1.0) for c in chunks[:5]]
+        if distances:
+            confidence = round(max(0.0, min(1.0, 1.0 - sum(distances) / len(distances))), 3)
+
     sources = list({c["metadata"].get("source", "unknown") for c in chunks})
 
     return {
@@ -117,6 +129,40 @@ def tracker_node(state: GroklyState) -> dict:
         "tracker_retries":     tracker_retries,
         "needs_reretrieval":   False,
     }
+
+
+def _try_web_search_via_mcp(
+    question: str, chunks: list[dict], tool_calls_made: list[str]
+) -> tuple[list[dict], list[str]]:
+    """Attempt a Tavily web search via MCP web_server; silently skip on failure."""
+    try:
+        from grokly.mcp_servers.server_manager import MCPServerManager
+        mgr = MCPServerManager()
+        raw = mgr.call_tool("web", "web_search", {"query": question, "max_results": 3})
+        data = json.loads(raw)
+        web_results = data.get("results", [])
+        tool_calls_made.append(f"tracker:web_search(mcp, query={question[:60]})")
+
+        seen = {c["text"] for c in chunks}
+        for r in web_results:
+            text = f"{r.get('title', '')}\n{r.get('content', '')}"
+            if text not in seen:
+                chunks.append({
+                    "text": text,
+                    "metadata": {
+                        "source": "web",
+                        "chunk_type": "web",
+                        "url": r.get("url", ""),
+                    },
+                    "distance": max(0.0, 1.0 - r.get("score", 0.5)),
+                })
+                seen.add(text)
+
+        logger.debug("Tracker added %d web results via MCP", len(web_results))
+    except Exception as exc:
+        logger.debug("MCP web search skipped: %s", exc)
+
+    return chunks, tool_calls_made
 
 
 def _format_chunks(chunks: list[dict]) -> str:

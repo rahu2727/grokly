@@ -1,0 +1,24 @@
+{
+  "servers": {
+    "knowledge": {
+      "command": "python",
+      "args": ["grokly/mcp_servers/knowledge_server.py"],
+      "description": "ChromaDB knowledge base search"
+    },
+    "file": {
+      "command": "python",
+      "args": ["grokly/mcp_servers/file_server.py"],
+      "description": "Source file reader"
+    },
+    "web": {
+      "command": "python",
+      "args": ["grokly/mcp_servers/web_server.py"],
+      "description": "Tavily web search"
+    },
+    "analysis": {
+      "command": "python",
+      "args": ["grokly/mcp_servers/analysis_server.py"],
+      "description": "Impact analysis tools"
+    }
+  }
+}

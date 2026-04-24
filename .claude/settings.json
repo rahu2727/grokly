@@ -5,7 +5,8 @@
       "Bash(venv/Scripts/python -c ' *)",
       "Bash(venv/Scripts/pip install *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(venv/Scripts/python -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")"
     ]
   }
 }
