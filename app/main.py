@@ -232,23 +232,20 @@ def _render_proactive(insights: dict) -> None:
 
     gap = insights.get("gap_alert", {})
     if gap.get("triggered"):
-        msg = gap["message"]
-        sug_lines = "\n".join(
-            f"- **{s['topic']}**: {s['snippet']}"
-            for s in gap.get("suggestions", [])
-        )
-        st.warning(
-            f"**{msg}**"
-            + (f"\n\nThese related topics have better coverage:\n{sug_lines}" if sug_lines else "")
-        )
+        st.warning(f"**{gap['message']}**")
 
     related = insights.get("related", {})
     if related.get("triggered"):
         with st.expander("💡 You might also want to know", expanded=False):
             for s in related.get("suggestions", []):
-                st.markdown(f"**{s['type'].title()}**: {s['function']}")
-                st.caption(s["description"])
-                btn_key = f"btn_{s['function'].replace(' ', '_')}"
+                # Each role uses a different primary field for the display name
+                display_name = (
+                    s.get("function") or s.get("topic") or s.get("scenario") or "?"
+                )
+                label = s.get("label", s.get("type", "Related").title())
+                st.markdown(f"**{label}:** {display_name}")
+                st.caption(s.get("description", ""))
+                btn_key = f"proactive_{hash(display_name + s.get('prompt', ''))}"
                 if st.button(s["prompt"], key=btn_key):
                     st.session_state.auto_question = s["prompt"]
                     st.rerun()

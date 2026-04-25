@@ -122,7 +122,7 @@ def run(
     try:
         store = ChromaStore()
         proactive = ProactiveAgent(store)
-        raw_insights = proactive.analyse(
+        result["proactive_insights"] = proactive.analyse(
             question=resolved_question,
             answer=answer,
             role=role_clean,
@@ -130,7 +130,6 @@ def run(
             sources=result["sources"],
             retrieved_chunks=retrieved_chunks,
         )
-        result["proactive_insights"] = proactive.format_for_ui(raw_insights, role_clean)
     except Exception as exc:
         import logging
         logging.getLogger(__name__).debug("Proactive agent skipped: %s", exc)

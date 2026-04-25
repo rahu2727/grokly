@@ -1,14 +1,18 @@
 """
 grokly/agents/proactive_agent.py — The Proactive Agent.
 
-Runs after The Briefer delivers an answer and surfaces three types of
-unsolicited insights without the user having to ask:
+Surfaces unsolicited insights after every answer. Each role gets a
+completely different search strategy — not the same data reformatted:
 
-  1. Knowledge gap alerts  — warns when retrieval confidence is low and
-                             suggests better-covered adjacent topics.
-  2. Related knowledge     — surfaces callers, callees, and sibling functions
-                             from the same module.
-  3. Staleness detector    — warns when ingested commentary is > 30 days old.
+  developer    → call_graph + raw_code: callers, callees, sibling functions
+  business_user → docs + forum: related business processes (no function names)
+  manager      → docs + forum: governance, approval rules, audit context
+  uat_tester   → commentary + forum: validation functions and failure scenarios
+  end_user     → docs + forum: simple next steps in plain language
+
+Cross-cutting behaviours run for every role:
+  gap_alert  — low-confidence warning with role-appropriate wording
+  staleness  — warns when ingested chunks are > 30 days old
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ from grokly.store.chroma_store import ChromaStore
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-_LOW_CONFIDENCE_THRESHOLD = 0.60
+_LOW_CONFIDENCE = 0.60
 _VERY_LOW_CONFIDENCE = 0.35
 _STALENESS_DAYS = 30
 
@@ -32,7 +36,7 @@ _STOPWORDS = {
     "what", "does", "how", "when", "where", "which", "about", "with",
     "have", "from", "that", "this", "will", "would", "could", "should",
     "tell", "show", "give", "explain", "list", "find", "make", "into",
-    "does", "work", "used", "used", "using", "call", "called",
+    "work", "used", "using", "call", "called", "submit", "create",
 }
 
 
@@ -53,204 +57,362 @@ class ProactiveAgent:
         sources: list,
         retrieved_chunks: list,
     ) -> dict:
-        gap = self._check_knowledge_gap(confidence, question, retrieved_chunks)
-        related = self._find_related_knowledge(question, answer, role, retrieved_chunks)
-        staleness = self._check_staleness(retrieved_chunks)
-        has_insights = (
-            gap.get("triggered")
-            or related.get("triggered")
-            or staleness.get("triggered")
-        )
+        if role == "developer":
+            suggestions = self._analyse_for_developer(
+                question, answer, confidence, retrieved_chunks)
+        elif role == "business_user":
+            suggestions = self._analyse_for_business_user(
+                question, answer, confidence)
+        elif role == "manager":
+            suggestions = self._analyse_for_manager(
+                question, answer, confidence)
+        elif role == "uat_tester":
+            suggestions = self._analyse_for_uat_tester(
+                question, answer, confidence)
+        elif role == "end_user":
+            suggestions = self._analyse_for_end_user(
+                question, answer, confidence)
+        else:
+            suggestions = []
+
+        gap = self._check_knowledge_gap(confidence, question, role)
+        stale = self._check_staleness(retrieved_chunks)
+
         return {
             "gap_alert": gap,
-            "related":   related,
-            "staleness": staleness,
-            "has_insights": bool(has_insights),
-        }
-
-    def format_for_ui(self, insights: dict, role: str) -> dict:
-        """Filter and reformat insights to match what each role cares about."""
-        gap      = insights.get("gap_alert", {})
-        related  = insights.get("related",   {})
-        staleness = insights.get("staleness", {})
-
-        out: dict = {"gap_alert": {}, "related": {}, "staleness": {}, "has_insights": False}
-
-        if role in ("developer", "system_admin"):
-            out["gap_alert"] = gap
-            out["related"]   = related
-            out["staleness"] = staleness
-
-        elif role in ("business_user", "manager", "consultant"):
-            out["gap_alert"] = gap
-            if related.get("triggered"):
-                humanised = [
-                    {
-                        **s,
-                        "function": s["function"].replace("_", " ").title(),
-                        "prompt":   f"Ask me: Tell me about {s['function'].replace('_', ' ').title()}",
-                    }
-                    for s in related.get("suggestions", [])
-                ]
-                out["related"] = {**related, "suggestions": humanised}
-            # staleness not surfaced — business users don't care about ingest dates
-
-        elif role == "end_user":
-            if gap.get("triggered") and gap.get("confidence", 1.0) < _VERY_LOW_CONFIDENCE:
-                out["gap_alert"] = gap
-            # related and staleness hidden
-
-        elif role == "uat_tester":
-            out["gap_alert"] = gap
-            if related.get("triggered"):
-                uat_sug = [
-                    s for s in related.get("suggestions", [])
-                    if any(
-                        kw in s.get("function", "").lower()
-                        for kw in ("valid", "check", "test", "verif", "assert", "submit")
-                    )
-                ]
-                if uat_sug:
-                    out["related"] = {**related, "suggestions": uat_sug}
-            # staleness shown for UAT (they care about fresh data)
-            out["staleness"] = staleness
-
-        else:
-            # doc_generator or unknown: gap + staleness
-            out["gap_alert"] = gap
-            out["staleness"] = staleness
-
-        out["has_insights"] = bool(
-            out["gap_alert"].get("triggered")
-            or out["related"].get("triggered")
-            or out["staleness"].get("triggered")
-        )
-        return out
-
-    # ------------------------------------------------------------------
-    # Behaviour 1: Knowledge gap alert
-    # ------------------------------------------------------------------
-
-    def _check_knowledge_gap(
-        self,
-        confidence: float,
-        question: str,
-        chunks: list,
-    ) -> dict:
-        if confidence >= _LOW_CONFIDENCE_THRESHOLD:
-            return {"triggered": False}
-
-        pct = round(confidence * 100)
-        suggestions: list[dict] = []
-
-        try:
-            candidates = self.store.query(question, n_results=10)
-            existing = {c["text"][:120] for c in chunks}
-
-            for c in candidates:
-                key = c["text"][:120]
-                if key in existing:
-                    continue
-                dist = c.get("distance", 1.0)
-                if dist > 0.45:  # skip low-quality matches
-                    continue
-                meta = c.get("metadata", {})
-                topic = (
-                    meta.get("function_name")
-                    or meta.get("module")
-                    or meta.get("source", "ERPNext")
-                )
-                suggestions.append({
-                    "topic":      topic,
-                    "chunk_type": meta.get("chunk_type", "general"),
-                    "snippet":    c["text"][:100].replace("\n", " "),
-                })
-                if len(suggestions) == 3:
-                    break
-        except Exception as exc:
-            logger.debug("Gap check failed: %s", exc)
-
-        return {
-            "triggered":   True,
-            "confidence":  confidence,
-            "message":     f"My confidence on this topic is low ({pct}%).",
-            "suggestions": suggestions,
+            "related": {
+                "triggered": len(suggestions) >= 2,
+                "suggestions": suggestions,
+            },
+            "staleness": stale,
+            "has_insights": bool(
+                gap.get("triggered")
+                or len(suggestions) >= 2
+                or stale.get("triggered")
+            ),
         }
 
     # ------------------------------------------------------------------
-    # Behaviour 2: Related knowledge suggestions
+    # Role-specific analysers
     # ------------------------------------------------------------------
 
-    def _find_related_knowledge(
+    def _analyse_for_developer(
         self,
         question: str,
         answer: str,
-        role: str,
-        chunks: list,
-    ) -> dict:
-        entity = _extract_entity(question)
-        if not entity:
-            return {"triggered": False}
+        confidence: float,
+        retrieved_chunks: list,
+    ) -> list[dict]:
+        """Callers, callees, and sibling functions from call_graph + raw_code."""
+        fn = _extract_function_name(question)
+        if not fn:
+            return []
 
         suggestions: list[dict] = []
-        seen_fns: set[str] = {entity}
+        seen: set[str] = {fn}
 
+        # Call-graph neighbours
         try:
-            # 1. Call-graph neighbours
-            call_chunks = self.store.query(
-                entity, n_results=5,
+            cg_chunks = self.store.query(
+                fn, n_results=6,
                 where={"chunk_type": {"$eq": "call_graph"}},
             )
-            for c in call_chunks:
+            for c in cg_chunks:
                 meta = c.get("metadata", {})
-                fn = meta.get("function_name", "")
-                if not fn or fn in seen_fns:
+                neighbour = meta.get("function_name", "")
+                if not neighbour or neighbour in seen:
                     continue
-                seen_fns.add(fn)
+                seen.add(neighbour)
+                text = c["text"]
+                rel_type = "caller" if fn in text.split("calls")[-1:] else "callee"
                 suggestions.append({
-                    "type":        "related",
-                    "function":    fn,
-                    "description": c["text"][:80].replace("\n", " "),
-                    "prompt":      f"Ask me: What does {fn} do?",
+                    "type":        rel_type,
+                    "label":       "Called by" if rel_type == "caller" else "Also calls",
+                    "function":    neighbour,
+                    "description": text[:80].replace("\n", " "),
+                    "prompt":      f"What does {neighbour} do?",
                 })
         except Exception as exc:
-            logger.debug("Call-graph search failed: %s", exc)
+            logger.debug("Developer call-graph search failed: %s", exc)
 
-        try:
-            # 2. Sibling functions in same module
-            module = next(
-                (c.get("metadata", {}).get("module") for c in chunks
-                 if c.get("metadata", {}).get("module")),
-                None,
-            )
-            if module:
+        # Sibling functions in the same module
+        module = next(
+            (c.get("metadata", {}).get("module") for c in retrieved_chunks
+             if c.get("metadata", {}).get("module")),
+            None,
+        )
+        if module and len(suggestions) < 3:
+            try:
                 mod_chunks = self.store.query(
                     module, n_results=8,
                     where={"chunk_type": {"$eq": "commentary"}},
                 )
                 for c in mod_chunks:
                     meta = c.get("metadata", {})
-                    fn = meta.get("function_name", "")
-                    if not fn or fn in seen_fns:
+                    sibling = meta.get("function_name", "")
+                    if not sibling or sibling in seen:
                         continue
-                    seen_fns.add(fn)
+                    seen.add(sibling)
                     suggestions.append({
-                        "type":        "related",
-                        "function":    fn,
+                        "type":        "sibling",
+                        "label":       "Same module",
+                        "function":    sibling,
                         "description": c["text"][:80].replace("\n", " "),
-                        "prompt":      f"Ask me: What does {fn} do?",
+                        "prompt":      f"What does {sibling} do?",
                     })
+            except Exception as exc:
+                logger.debug("Developer sibling search failed: %s", exc)
+
+        return suggestions[:3]
+
+    def _analyse_for_business_user(
+        self,
+        question: str,
+        answer: str,
+        confidence: float,
+    ) -> list[dict]:
+        """Related business processes from docs and forum — no function names."""
+        topic = _extract_business_topic(question)
+        if not topic:
+            return []
+
+        suggestions: list[dict] = []
+        seen_topics: set[str] = set()
+
+        for chunk_type in ("docs", "forum"):
+            try:
+                chunks = self.store.query(
+                    f"related process {topic}",
+                    n_results=5,
+                    where={"chunk_type": {"$eq": chunk_type}},
+                )
+                for c in chunks:
+                    meta = c.get("metadata", {})
+                    # Use title from metadata, or infer from source
+                    title = (
+                        meta.get("title")
+                        or meta.get("page_title")
+                        or meta.get("source", "").replace("_", " ").title()
+                    )
+                    if not title or title in seen_topics:
+                        continue
+                    seen_topics.add(title)
+                    desc = c["text"][:100].replace("\n", " ")
+                    suggestions.append({
+                        "type":        "related_process",
+                        "label":       "Related process",
+                        "topic":       title,
+                        "description": desc,
+                        "prompt":      f"Tell me about {title}",
+                    })
+            except Exception as exc:
+                logger.debug("Business user search failed (%s): %s", chunk_type, exc)
+
+            if len(suggestions) >= 3:
+                break
+
+        return suggestions[:3]
+
+    def _analyse_for_manager(
+        self,
+        question: str,
+        answer: str,
+        confidence: float,
+    ) -> list[dict]:
+        """Governance, approval rules, and audit context from docs and forum."""
+        topic = _extract_business_topic(question)
+        governance_query = f"approval limit delegation audit {topic}" if topic else "approval workflow audit"
+
+        suggestions: list[dict] = []
+        seen_topics: set[str] = set()
+
+        for chunk_type in ("docs", "forum"):
+            try:
+                chunks = self.store.query(
+                    governance_query,
+                    n_results=5,
+                    where={"chunk_type": {"$eq": chunk_type}},
+                )
+                for c in chunks:
+                    meta = c.get("metadata", {})
+                    title = (
+                        meta.get("title")
+                        or meta.get("page_title")
+                        or meta.get("source", "").replace("_", " ").title()
+                    )
+                    if not title or title in seen_topics:
+                        continue
+                    seen_topics.add(title)
+                    desc = c["text"][:100].replace("\n", " ")
+                    suggestions.append({
+                        "type":        "governance",
+                        "label":       "Governance",
+                        "topic":       title,
+                        "description": desc,
+                        "prompt":      f"What are the approval rules for {title.lower()}?",
+                    })
+            except Exception as exc:
+                logger.debug("Manager search failed (%s): %s", chunk_type, exc)
+
+            if len(suggestions) >= 3:
+                break
+
+        return suggestions[:3]
+
+    def _analyse_for_uat_tester(
+        self,
+        question: str,
+        answer: str,
+        confidence: float,
+    ) -> list[dict]:
+        """Validation functions and known failure scenarios from commentary + forum."""
+        topic = _extract_business_topic(question) or question[:60]
+
+        suggestions: list[dict] = []
+        seen: set[str] = set()
+
+        # Validation functions from commentary
+        try:
+            val_chunks = self.store.query(
+                f"validate {topic} error condition",
+                n_results=5,
+                where={"chunk_type": {"$eq": "commentary"}},
+            )
+            for c in val_chunks:
+                meta = c.get("metadata", {})
+                fn = meta.get("function_name", "")
+                if not fn or fn in seen:
+                    continue
+                if not any(kw in fn.lower() for kw in
+                           ("valid", "check", "verif", "assert", "submit", "test")):
+                    continue
+                seen.add(fn)
+                suggestions.append({
+                    "type":        "validation",
+                    "label":       "Also test",
+                    "scenario":    fn.replace("_", " ").title(),
+                    "description": c["text"][:100].replace("\n", " "),
+                    "prompt":      f"What validation runs in {fn}?",
+                })
         except Exception as exc:
-            logger.debug("Module sibling search failed: %s", exc)
+            logger.debug("UAT validation search failed: %s", exc)
 
-        top = suggestions[:3]
-        if len(top) < 2:
-            return {"triggered": False}
+        # Known failure scenarios from forum
+        try:
+            forum_chunks = self.store.query(
+                f"{topic} error fails rejected",
+                n_results=4,
+                where={"chunk_type": {"$eq": "forum"}},
+            )
+            for c in forum_chunks:
+                meta = c.get("metadata", {})
+                title = meta.get("title") or meta.get("source", "Forum issue")
+                if title in seen:
+                    continue
+                seen.add(title)
+                desc = c["text"][:100].replace("\n", " ")
+                suggestions.append({
+                    "type":        "edge_case",
+                    "label":       "Test scenario",
+                    "scenario":    title,
+                    "description": desc,
+                    "prompt":      f"What happens when {topic} fails or is rejected?",
+                })
+        except Exception as exc:
+            logger.debug("UAT forum search failed: %s", exc)
 
-        return {"triggered": True, "suggestions": top}
+        return suggestions[:3]
+
+    def _analyse_for_end_user(
+        self,
+        question: str,
+        answer: str,
+        confidence: float,
+    ) -> list[dict]:
+        """Simple next steps and related help from docs and forum — plain language only."""
+        topic = _extract_business_topic(question) or question[:60]
+
+        suggestions: list[dict] = []
+        seen_topics: set[str] = set()
+
+        # Search docs and forum for simple follow-up guidance
+        for chunk_type in ("docs", "forum"):
+            try:
+                chunks = self.store.query(
+                    f"how to {topic} next steps",
+                    n_results=4,
+                    where={"chunk_type": {"$eq": chunk_type}},
+                )
+                for c in chunks:
+                    meta = c.get("metadata", {})
+                    title = (
+                        meta.get("title")
+                        or meta.get("page_title")
+                        or meta.get("source", "").replace("_", " ").title()
+                    )
+                    if not title or title in seen_topics:
+                        continue
+                    # Skip anything that looks like a function name (contains underscore + lowercase)
+                    if re.search(r'[a-z]_[a-z]', title):
+                        continue
+                    seen_topics.add(title)
+                    desc = c["text"][:100].replace("\n", " ")
+                    suggestions.append({
+                        "type":        "next_step",
+                        "label":       "What's next",
+                        "topic":       title,
+                        "description": desc,
+                        "prompt":      f"How do I {topic.lower()}?",
+                    })
+            except Exception as exc:
+                logger.debug("End user search failed (%s): %s", chunk_type, exc)
+
+            if len(suggestions) >= 2:
+                break
+
+        return suggestions[:2]
 
     # ------------------------------------------------------------------
-    # Behaviour 3: Staleness detector
+    # Cross-cutting: knowledge gap alert
+    # ------------------------------------------------------------------
+
+    def _check_knowledge_gap(
+        self, confidence: float, question: str, role: str
+    ) -> dict:
+        if confidence >= _LOW_CONFIDENCE:
+            return {"triggered": False}
+
+        pct = round(confidence * 100)
+
+        if role in ("developer", "system_admin"):
+            message = (
+                f"Low retrieval confidence ({pct}%). "
+                "This function may not be fully indexed in the knowledge base."
+            )
+        elif role in ("business_user", "manager", "consultant"):
+            message = (
+                f"I have limited information on this topic ({pct}% confidence). "
+                "The suggestions below may help."
+            )
+        elif role == "uat_tester":
+            message = (
+                f"Test coverage data is limited for this area ({pct}% confidence). "
+                "Consider exploring related scenarios."
+            )
+        else:
+            message = (
+                f"I'm not fully confident in this answer ({pct}%). "
+                "You may want to check with your administrator."
+            )
+
+        return {
+            "triggered":  True,
+            "confidence": confidence,
+            "message":    message,
+        }
+
+    # ------------------------------------------------------------------
+    # Cross-cutting: staleness detector
     # ------------------------------------------------------------------
 
     def _check_staleness(self, chunks: list) -> dict:
@@ -275,31 +437,50 @@ class ProactiveAgent:
             return {"triggered": False}
 
         return {
-            "triggered":          True,
-            "days_old":           oldest_days,
-            "oldest_chunk_date":  oldest_date,
-            "message":            f"Commentary was generated {oldest_days} days ago.",
-            "action":             "py ingest.py --source commentary",
+            "triggered":         True,
+            "days_old":          oldest_days,
+            "oldest_chunk_date": oldest_date,
+            "message":           f"Commentary was generated {oldest_days} days ago.",
+            "action":            "py ingest.py --source commentary",
         }
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Extraction helpers
 # ---------------------------------------------------------------------------
 
-def _extract_entity(question: str) -> str:
-    """Return the most likely technical entity (function/class/module) in a question."""
-    # Prefer snake_case identifiers — longest wins
+def _extract_function_name(question: str) -> str:
+    """Return the most likely function name (snake_case) from a question."""
     snake = re.findall(r'\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b', question)
     if snake:
         return max(snake, key=len)
-
     # PascalCase class names
     pascal = re.findall(r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b', question)
-    if pascal:
-        return pascal[0]
+    return pascal[0] if pascal else ""
 
-    # Fall back to longest meaningful word
+
+def _extract_business_topic(question: str) -> str:
+    """Return a plain-English business topic phrase from a question."""
+    # Multi-word business phrases — order matters (longer matches first)
+    _PHRASES = [
+        "expense claim", "leave application", "purchase order",
+        "salary slip", "attendance record", "journal entry",
+        "sales order", "purchase invoice", "payment entry",
+        "employee transfer", "appraisal cycle", "asset allocation",
+        "stock entry", "delivery note", "quality inspection",
+    ]
+    q_lower = question.lower()
+    for phrase in _PHRASES:
+        if phrase in q_lower:
+            return phrase
+
+    # Fall back to first meaningful multi-word noun phrase
     words = re.sub(r'[^a-zA-Z ]', ' ', question).split()
-    candidates = [w.lower() for w in words if len(w) > 4 and w.lower() not in _STOPWORDS]
-    return max(candidates, key=len) if candidates else ""
+    candidates = [
+        w.lower() for w in words
+        if len(w) > 4 and w.lower() not in _STOPWORDS
+    ]
+    # Prefer two-word pair if available
+    if len(candidates) >= 2:
+        return f"{candidates[0]} {candidates[1]}"
+    return candidates[0] if candidates else ""
