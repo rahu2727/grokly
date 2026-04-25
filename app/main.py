@@ -226,6 +226,41 @@ def _render_details(entry: dict) -> None:
             st.caption("Sources: " + ", ".join(f"`{s}`" for s in sorted(sources)))
 
 
+def _render_proactive(insights: dict) -> None:
+    if not insights.get("has_insights"):
+        return
+
+    gap = insights.get("gap_alert", {})
+    if gap.get("triggered"):
+        msg = gap["message"]
+        sug_lines = "\n".join(
+            f"- **{s['topic']}**: {s['snippet']}"
+            for s in gap.get("suggestions", [])
+        )
+        st.warning(
+            f"**{msg}**"
+            + (f"\n\nThese related topics have better coverage:\n{sug_lines}" if sug_lines else "")
+        )
+
+    related = insights.get("related", {})
+    if related.get("triggered"):
+        with st.expander("💡 You might also want to know", expanded=False):
+            for s in related.get("suggestions", []):
+                st.markdown(f"**{s['type'].title()}**: {s['function']}")
+                st.caption(s["description"])
+                btn_key = f"btn_{s['function'].replace(' ', '_')}"
+                if st.button(s["prompt"], key=btn_key):
+                    st.session_state.auto_question = s["prompt"]
+                    st.rerun()
+
+    stale = insights.get("staleness", {})
+    if stale.get("triggered"):
+        st.info(
+            f"ℹ️ **{stale['message']}**\n\n"
+            f"To refresh: `{stale['action']}`"
+        )
+
+
 def _render_export(entry: dict) -> None:
     if entry.get("persona_key") != "doc_generator":
         return
@@ -258,6 +293,12 @@ for entry in st.session_state.history:
 query = st.chat_input(
     placeholder="e.g. How do I submit a leave application?",
 )
+
+# Pick up auto-questions set by proactive suggestion buttons
+if not query and "auto_question" in st.session_state:
+    raw = st.session_state.pop("auto_question")
+    # Strip "Ask me: " button-label prefix to get the bare question
+    query = raw[8:] if raw.startswith("Ask me: ") else raw
 
 if query:
     mem: SessionMemory = st.session_state.session_memory
@@ -301,5 +342,6 @@ if query:
 
         _render_details(entry)
         _render_export(entry)
+        _render_proactive(result.get("proactive_insights", {}))
 
     st.session_state.history.append(entry)

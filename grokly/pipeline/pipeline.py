@@ -10,8 +10,10 @@ Usage:
     print(result["tools_used"])
 """
 
+from grokly.agents.proactive_agent import ProactiveAgent
 from grokly.pipeline.graph import get_graph
 from grokly.pipeline.state import GroklyState
+from grokly.store.chroma_store import ChromaStore
 
 VALID_ROLES = {
     "end_user", "business_user", "manager", "developer",
@@ -104,6 +106,8 @@ def run(
     if not answer:
         answer = "No answer could be generated. Check API keys and ChromaDB population."
 
+    retrieved_chunks = final_state.get("retrieved_chunks", [])
+
     result = {
         "answer":            answer,
         "sources":           final_state.get("sources", []),
@@ -113,6 +117,24 @@ def run(
         "quality_score":     round(final_state.get("quality_score", 0.0), 2),
         "resolved_question": resolved_question,
     }
+
+    # ── Proactive insights ────────────────────────────────────────────────────
+    try:
+        store = ChromaStore()
+        proactive = ProactiveAgent(store)
+        raw_insights = proactive.analyse(
+            question=resolved_question,
+            answer=answer,
+            role=role_clean,
+            confidence=result["confidence"],
+            sources=result["sources"],
+            retrieved_chunks=retrieved_chunks,
+        )
+        result["proactive_insights"] = proactive.format_for_ui(raw_insights, role_clean)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Proactive agent skipped: %s", exc)
+        result["proactive_insights"] = {"has_insights": False}
 
     # ── Post-run memory updates ───────────────────────────────────────────────
     if session_memory is not None:
