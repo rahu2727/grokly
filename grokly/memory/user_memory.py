@@ -23,6 +23,28 @@ _UNKNOWN_USER = "anonymous"
 
 
 class UserMemory:
+    @staticmethod
+    def get_user_id(role: str = None) -> str:
+        from grokly.brand import IDENTITY_MODE
+
+        if IDENTITY_MODE == "machine":
+            import os
+            import socket
+            try:
+                return f"{socket.gethostname()}_{os.getlogin()}"
+            except Exception:
+                return "default_user"
+
+        elif IDENTITY_MODE == "role":
+            return f"role_{role}" if role else "unknown_role"
+
+        elif IDENTITY_MODE == "prompt":
+            # Handled in Streamlit UI session state
+            return "prompt_required"
+
+        else:
+            return "default_user"
+
     def __init__(self, store: ChromaStore | None = None) -> None:
         base_store = store or ChromaStore()
         self._col = base_store._client.get_or_create_collection(

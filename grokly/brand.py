@@ -29,3 +29,14 @@ PERSONA_LABELS = {
 
 BRAND_COLOUR_PRIMARY   = "#1a9e6e"
 BRAND_COLOUR_SECONDARY = "#c84b11"
+
+# Identity mode for user profiles
+# Change to "prompt" for multi-user pilot
+# Change to "auth" when Azure AD is integrated
+# Current: "machine" — one user per machine
+IDENTITY_MODE = "machine"
+# Options: "machine", "prompt", "role", "auth"
+# machine = Windows hostname + username (default)
+# prompt  = ask user their name on first visit
+# role    = track by role not individual
+# auth    = Azure AD (future sprint)
