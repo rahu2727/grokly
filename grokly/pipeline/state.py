@@ -35,3 +35,4 @@ class GroklyState(TypedDict, total=False):
 
     # ── Conversation memory ───────────────────────────────────────────────────
     messages: list[dict]     # running log: {role, content, quality?}
+    session_context: str     # compressed prior-turn context injected by SessionMemory

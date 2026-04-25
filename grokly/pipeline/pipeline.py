@@ -19,15 +19,19 @@ VALID_ROLES = {
 }
 
 
-def run(question: str, role: str = "business_user") -> dict:
+def run(
+    question: str,
+    role: str = "business_user",
+    session_context: str = "",
+) -> dict:
     """
     Run the full Grokly agentic pipeline for a question and role.
 
     Args:
-        question: Natural-language question about ERPNext.
-        role:     One of end_user | business_user | manager | developer |
-                  uat_tester | doc_generator | system_admin | consultant.
-                  Defaults to business_user.
+        question:        Natural-language question about ERPNext.
+        role:            One of end_user | business_user | manager | developer |
+                         uat_tester | doc_generator | system_admin | consultant.
+        session_context: Optional prior-turn context string from SessionMemory.
 
     Returns a dict with:
         answer          — final persona-formatted answer (str)
@@ -44,6 +48,7 @@ def run(question: str, role: str = "business_user") -> dict:
     initial_state: GroklyState = {
         "user_question":       question,
         "user_role":           role_clean,
+        "session_context":     session_context,
         "retrieved_chunks":    [],
         "retrieval_confidence": 0.0,
         "needs_reretrieval":   False,

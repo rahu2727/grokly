@@ -39,8 +39,15 @@ def counsel_node(state: GroklyState) -> dict:
     counsel_retries = state.get("counsel_retries", 0)
     messages = list(state.get("messages", []))
 
+    session_context: str = state.get("session_context", "")
     client = anthropic.Anthropic()
     context = _format_context(chunks)
+
+    session_prefix = (
+        f"Conversation history for reference:\n{session_context}\n\n"
+        if session_context
+        else ""
+    )
 
     # Step 1: Generate answer
     answer_response = client.messages.create(
@@ -51,6 +58,7 @@ def counsel_node(state: GroklyState) -> dict:
             {
                 "role": "user",
                 "content": (
+                    f"{session_prefix}"
                     f"Question: {question}\n"
                     f"User role: {role}\n\n"
                     f"Context:\n{context}\n\n"
