@@ -13,7 +13,7 @@ from grokly.brand import (
     APP_NAME,
     APP_TAGLINE,
     APP_VERSION,
-    BRAND_COLOUR_PRIMARY,
+    IDENTITY_MODE,
     PERSONA_LABELS,
 )
 from grokly.memory.session_memory import SessionMemory
@@ -43,7 +43,10 @@ if "session_memory" not in st.session_state:
     st.session_state.session_memory = SessionMemory(max_turns=10)
 
 if "user_id" not in st.session_state:
-    st.session_state.user_id: str = ""
+    if IDENTITY_MODE == "machine":
+        st.session_state.user_id: str = UserMemory.get_user_id()
+    else:
+        st.session_state.user_id: str = ""
 
 # ---------------------------------------------------------------------------
 # Shared store and user memory (cached per session)
@@ -86,18 +89,23 @@ with st.sidebar:
     st.markdown(f"*{APP_TAGLINE}*")
     st.divider()
 
-    # User identity
-    user_id_input = st.text_input(
-        "Your name / ID",
-        value=st.session_state.user_id,
-        placeholder="e.g. alice",
-        help="Optional: enables personalised memory across sessions.",
-    )
-    if user_id_input != st.session_state.user_id:
-        st.session_state.user_id = user_id_input
+    # User identity — display varies by IDENTITY_MODE
+    if IDENTITY_MODE == "machine":
+        st.caption(f"User: `{st.session_state.user_id}`")
+    elif IDENTITY_MODE == "prompt":
+        user_id_input = st.text_input(
+            "Your name / ID",
+            value=st.session_state.user_id,
+            placeholder="e.g. alice",
+            help="Enter your name to enable personalised memory across sessions.",
+        )
+        if user_id_input != st.session_state.user_id:
+            st.session_state.user_id = user_id_input
+    elif IDENTITY_MODE == "role":
+        st.caption("Tracking by role (no individual profiles)")
 
     # User memory stats
-    if st.session_state.user_id:
+    if st.session_state.user_id and IDENTITY_MODE != "role":
         stats = user_memory.get_stats(st.session_state.user_id)
         st.caption(
             f"Questions asked: **{stats['question_count']}** · "
@@ -160,7 +168,7 @@ st.divider()
 
 # Role selector — pre-fill from user memory if we have a returning user
 _default_role_idx = 0
-if st.session_state.user_id:
+if st.session_state.user_id and IDENTITY_MODE != "role":
     preferred = user_memory.get_preferred_role(st.session_state.user_id)
     if preferred in _PERSONA_KEYS:
         _default_role_idx = _PERSONA_KEYS.index(preferred)
