@@ -39,26 +39,27 @@ def counsel_node(state: GroklyState) -> dict:
     counsel_retries = state.get("counsel_retries", 0)
     messages = list(state.get("messages", []))
 
-    session_context: str = state.get("session_context", "")
+    conversation_context: str = state.get("conversation_context", "")
     client = anthropic.Anthropic()
     context = _format_context(chunks)
 
-    session_prefix = (
-        f"Conversation history for reference:\n{session_context}\n\n"
-        if session_context
-        else ""
-    )
+    system_prompt = _ANSWER_SYSTEM
+    if conversation_context:
+        system_prompt += (
+            f"\n\nRecent conversation history (for reference only — "
+            f"base your answer on the context chunks, not this history):\n"
+            f"{conversation_context}"
+        )
 
     # Step 1: Generate answer
     answer_response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
-        system=_ANSWER_SYSTEM,
+        system=system_prompt,
         messages=[
             {
                 "role": "user",
                 "content": (
-                    f"{session_prefix}"
                     f"Question: {question}\n"
                     f"User role: {role}\n\n"
                     f"Context:\n{context}\n\n"

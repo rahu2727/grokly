@@ -34,5 +34,7 @@ class GroklyState(TypedDict, total=False):
     tracker_retries: int         # how many times Tracker has re-retrieved
 
     # ── Conversation memory ───────────────────────────────────────────────────
-    messages: list[dict]     # running log: {role, content, quality?}
-    session_context: str     # compressed prior-turn context injected by SessionMemory
+    messages: list[dict]       # running log: {role, content, quality?}
+    resolved_question: str     # question after pronoun/reference resolution
+    conversation_context: str  # compressed prior-turn context from SessionMemory
+    user_profile_context: str  # personalisation hints from UserMemory (future)

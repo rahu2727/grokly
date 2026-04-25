@@ -253,63 +253,45 @@ query = st.chat_input(
 
 if query:
     mem: SessionMemory = st.session_state.session_memory
-
-    # Resolve pronouns / vague references against session history
-    resolved_query = mem.resolve_references(query)
+    uid = st.session_state.user_id or None
 
     with st.chat_message("user"):
-        if resolved_query != query:
-            st.markdown(f"**[{selected_label}]** {query}")
-            st.caption(f"*Interpreted as: {resolved_query}*")
-        else:
-            st.markdown(f"**[{selected_label}]** {query}")
+        st.markdown(f"**[{selected_label}]** {query}")
 
     with st.chat_message("assistant"):
         with st.spinner(f"Thinking as {selected_label}..."):
-            session_ctx = mem.get_context()
             result = pipeline_run(
-                resolved_query,
+                query,
                 role=selected_persona,
-                session_context=session_ctx,
+                session_memory=mem,
+                user_memory=user_memory if uid else None,
+                user_id=uid,
             )
 
         answer = result["answer"]
+        resolved = result.get("resolved_question", query)
         st.markdown(answer)
+
+        if resolved != query:
+            st.caption(f"*Interpreted as: {resolved}*")
 
         tools_used = result.get("tools_used", [])
         _render_tool_badges(tools_used)
 
         entry: dict = {
-            "query":         query,
-            "resolved_query": resolved_query,
-            "persona_key":   selected_persona,
-            "persona_label": selected_label,
-            "answer":        answer,
-            "tools_used":    tools_used,
-            "confidence":    result.get("confidence",      0.0),
-            "iterations":    result.get("iteration_count", 0),
-            "quality_score": result.get("quality_score",  0.0),
-            "sources":       result.get("sources",         []),
+            "query":          query,
+            "resolved_query": resolved,
+            "persona_key":    selected_persona,
+            "persona_label":  selected_label,
+            "answer":         answer,
+            "tools_used":     tools_used,
+            "confidence":     result.get("confidence",      0.0),
+            "iterations":     result.get("iteration_count", 0),
+            "quality_score":  result.get("quality_score",  0.0),
+            "sources":        result.get("sources",         []),
         }
 
         _render_details(entry)
         _render_export(entry)
-
-    # Update session memory
-    mem.add_turn(
-        question=resolved_query,
-        answer=answer,
-        role=selected_persona,
-        sources=result.get("sources", []),
-        confidence=result.get("confidence", 0.0),
-    )
-
-    # Update long-term user memory
-    if st.session_state.user_id:
-        user_memory.record_question(
-            st.session_state.user_id,
-            query,
-            selected_persona,
-        )
 
     st.session_state.history.append(entry)

@@ -76,10 +76,30 @@ class UserMemory:
         self._save_profile(user_id, profile)
         return profile
 
-    def update_profile(self, user_id: str, updates: dict) -> None:
-        """Merge updates into the stored profile."""
+    def update_profile(
+        self,
+        user_id: str,
+        question: str = None,
+        role: str = None,
+        confidence: float = None,
+    ) -> None:
+        """Update profile with optional question, role, and confidence from a pipeline run."""
         profile = self.get_or_create_profile(user_id)
-        profile.update(updates)
+
+        if role:
+            profile["preferred_role"] = role
+
+        if question:
+            profile["question_count"] = profile.get("question_count", 0) + 1
+            topics: list[str] = profile.get("topics_explored", [])
+            topic = question[:80]
+            if topic not in topics:
+                topics.insert(0, topic)
+            profile["topics_explored"] = topics[:20]
+
+        if confidence is not None:
+            profile["last_confidence"] = round(confidence, 3)
+
         profile["last_seen"] = datetime.utcnow().isoformat()
         self._save_profile(user_id, profile)
 
