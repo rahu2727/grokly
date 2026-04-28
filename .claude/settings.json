@@ -6,7 +6,13 @@
       "Bash(venv/Scripts/pip install *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(venv/Scripts/python -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")"
+      "Bash(venv/Scripts/python -c \"from grokly.brand import APP_NAME; print\\(APP_NAME\\)\")",
+      "Bash(py -c \"from grokly.memory import SessionMemory, UserMemory; print\\('imports OK'\\); m = SessionMemory\\(\\); print\\('SessionMemory OK, max_turns=', m.max_turns\\)\")",
+      "Bash(py -m pip install anthropic --quiet)",
+      "Bash(py -c \"from grokly.memory import SessionMemory, UserMemory; print\\('OK'\\); m = SessionMemory\\(\\); print\\('SessionMemory max_turns=', m.max_turns\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from grokly.memory import SessionMemory, UserMemory; print\\('OK'\\); m = SessionMemory\\(\\); print\\('SessionMemory max_turns=', m.max_turns\\)\")",
+      "Bash(c:/Users/chaud/Documents/grokly/venv/Scripts/python.exe -c \"from grokly.memory import SessionMemory, UserMemory; print\\('imports OK'\\); m = SessionMemory\\(\\); print\\('SessionMemory max_turns=', m.max_turns\\)\")",
+      "Bash(c:/Users/chaud/Documents/grokly/venv/Scripts/python.exe -c ' *)"
     ]
   }
 }
