@@ -121,17 +121,21 @@ with st.sidebar:
 
     st.divider()
 
-    # 5. Knowledge base stats
+    # 5. Knowledge base stats — high-level only, no internal chunk types
     st.subheader("Knowledge base")
     chunk_count = store.count()
     st.metric("Chunks indexed", f"{chunk_count:,}")
 
-    db_stats = store.stats()
-    if db_stats.get("by_source"):
-        for src, cnt in sorted(db_stats["by_source"].items()):
-            st.caption(f"`{src}`: {cnt:,}")
+    by_src = store.stats().get("by_source", {})
+    if by_src:
+        docs_count = by_src.get("docs", 0)
+        forum_count = by_src.get("forum", 0)
+        code_count = by_src.get("code_commentary", 0)
+        st.caption(f"📄 Documentation  ·  {docs_count:,}")
+        st.caption(f"💬 Q&A pairs  ·  {forum_count:,}")
+        st.caption(f"🧠 Code understood  ·  {code_count:,}")
     else:
-        st.warning("Knowledge base is empty. Run `python ingest.py` first.")
+        st.warning("Knowledge base empty. Run `python ingest.py` first.")
 
     st.divider()
 
@@ -174,7 +178,7 @@ with st.sidebar:
         if user_id_input != uid:
             st.session_state.user_id = user_id_input
 
-    st.caption(f"v{APP_VERSION} · Sprint 4C")
+    st.caption(f"v{APP_VERSION}")
 
 # ---------------------------------------------------------------------------
 # Derived vars from sidebar state
