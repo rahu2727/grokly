@@ -57,22 +57,26 @@ class ProactiveAgent:
         sources: list,
         retrieved_chunks: list,
     ) -> dict:
-        if role == "developer":
-            suggestions = self._analyse_for_developer(
-                question, answer, confidence, retrieved_chunks)
-        elif role == "business_user":
-            suggestions = self._analyse_for_business_user(
-                question, answer, confidence)
-        elif role == "manager":
-            suggestions = self._analyse_for_manager(
-                question, answer, confidence)
-        elif role == "uat_tester":
-            suggestions = self._analyse_for_uat_tester(
-                question, answer, confidence)
-        elif role == "end_user":
-            suggestions = self._analyse_for_end_user(
-                question, answer, confidence)
-        else:
+        try:
+            if role == "developer":
+                suggestions = self._analyse_for_developer(
+                    question, answer, confidence, retrieved_chunks)
+            elif role == "business_user":
+                suggestions = self._analyse_for_business_user(
+                    question, answer, confidence)
+            elif role == "manager":
+                suggestions = self._analyse_for_manager(
+                    question, answer, confidence)
+            elif role == "uat_tester":
+                suggestions = self._analyse_for_uat_tester(
+                    question, answer, confidence)
+            elif role == "end_user":
+                suggestions = self._analyse_for_end_user(
+                    question, answer, confidence)
+            else:
+                suggestions = []
+        except Exception as exc:
+            logger.warning("Proactive agent error (%s): %s", role, exc)
             suggestions = []
 
         gap = self._check_knowledge_gap(confidence, question, role)
@@ -81,13 +85,13 @@ class ProactiveAgent:
         return {
             "gap_alert": gap,
             "related": {
-                "triggered": len(suggestions) >= 2,
+                "triggered": len(suggestions) >= 1,
                 "suggestions": suggestions,
             },
             "staleness": stale,
             "has_insights": bool(
                 gap.get("triggered")
-                or len(suggestions) >= 2
+                or len(suggestions) >= 1
                 or stale.get("triggered")
             ),
         }
@@ -188,12 +192,7 @@ class ProactiveAgent:
                 )
                 for c in chunks:
                     meta = c.get("metadata", {})
-                    # Use title from metadata, or infer from source
-                    title = (
-                        meta.get("title")
-                        or meta.get("page_title")
-                        or meta.get("source", "").replace("_", " ").title()
-                    )
+                    title = _derive_display_title(c, meta)
                     if not title or title in seen_topics:
                         continue
                     seen_topics.add(title)
@@ -235,11 +234,7 @@ class ProactiveAgent:
                 )
                 for c in chunks:
                     meta = c.get("metadata", {})
-                    title = (
-                        meta.get("title")
-                        or meta.get("page_title")
-                        or meta.get("source", "").replace("_", " ").title()
-                    )
+                    title = _derive_display_title(c, meta)
                     if not title or title in seen_topics:
                         continue
                     seen_topics.add(title)
@@ -345,14 +340,9 @@ class ProactiveAgent:
                 )
                 for c in chunks:
                     meta = c.get("metadata", {})
-                    title = (
-                        meta.get("title")
-                        or meta.get("page_title")
-                        or meta.get("source", "").replace("_", " ").title()
-                    )
+                    title = _derive_display_title(c, meta)
                     if not title or title in seen_topics:
                         continue
-                    # Skip anything that looks like a function name (contains underscore + lowercase)
                     if re.search(r'[a-z]_[a-z]', title):
                         continue
                     seen_topics.add(title)
@@ -448,6 +438,35 @@ class ProactiveAgent:
 # ---------------------------------------------------------------------------
 # Extraction helpers
 # ---------------------------------------------------------------------------
+
+_GENERIC_SOURCE_NAMES = {
+    "forum", "docs", "code commentary", "commentary",
+    "raw code", "call graph", "unknown",
+}
+
+
+def _derive_display_title(chunk: dict, meta: dict) -> str:
+    """Return a human-readable title for a chunk, avoiding generic source names."""
+    # 1. Prefer explicit title metadata
+    title = meta.get("title") or meta.get("page_title") or meta.get("doc_title")
+    if title and title.lower() not in _GENERIC_SOURCE_NAMES:
+        return title.strip()
+
+    # 2. Derive from first meaningful line of text
+    first_line = chunk.get("text", "").split("\n")[0].strip()
+    # Skip lines that look like function headers ("Function: foo_bar")
+    if first_line and not re.match(r'^(Function|File|Module|Class):', first_line):
+        candidate = first_line[:70]
+        if len(candidate) > 8:
+            return candidate
+
+    # 3. Fall back to source, but only if it's not a generic name
+    source = meta.get("source", "").replace("_", " ").title()
+    if source.lower() not in _GENERIC_SOURCE_NAMES:
+        return source
+
+    return ""
+
 
 def _extract_function_name(question: str) -> str:
     """Return the most likely function name (snake_case) from a question."""

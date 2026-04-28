@@ -4,7 +4,7 @@ Change values here to rebrand — zero code changes needed.
 Technical package name (grokly/) never changes.
 """
 
-APP_NAME        = "Grokly"
+APP_NAME        = "GroklyAI"
 APP_TAGLINE     = "Your codebase, understood."
 APP_DESCRIPTION = "AI knowledge assistant for enterprise systems"
 APP_VERSION     = "0.1.0"

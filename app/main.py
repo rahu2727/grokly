@@ -1,11 +1,13 @@
 """
-app/main.py — Grokly Streamlit application (Sprint 4B).
+app/main.py — GroklyAI Streamlit application (Sprint 4C).
 
 Run with:
     streamlit run app/main.py
 """
 
 from __future__ import annotations
+
+import os
 
 import streamlit as st
 
@@ -21,13 +23,15 @@ from grokly.memory.user_memory import UserMemory
 from grokly.pipeline.pipeline import run as pipeline_run
 from grokly.store.chroma_store import ChromaStore
 
+_DEBUG = os.getenv("GROKLY_DEBUG", "false").lower() == "true"
+
 # ---------------------------------------------------------------------------
 # Page config — must be first Streamlit call
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
     page_title=APP_NAME,
-    page_icon="🔍",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -70,131 +74,116 @@ user_memory = _get_user_memory()
 # Persona config
 # ---------------------------------------------------------------------------
 
-_PERSONA_KEYS = [
-    "end_user",
-    "business_user",
-    "manager",
-    "developer",
-    "uat_tester",
-    "doc_generator",
-]
-_PERSONA_OPTIONS = [PERSONA_LABELS[k] for k in _PERSONA_KEYS]
+_PERSONA_KEYS = list(PERSONA_LABELS.keys())
+
+_ROLE_DESCRIPTIONS = {
+    "end_user":      "Step by step guidance",
+    "business_user": "Process and policy detail",
+    "manager":       "Approval rules and governance",
+    "developer":     "Technical depth and code refs",
+    "uat_tester":    "Edge cases and test scenarios",
+    "doc_generator": "Documentation generation",
+}
+
+# Pre-fill role from user memory on first visit
+if "selected_role" not in st.session_state:
+    uid = st.session_state.user_id
+    if uid and IDENTITY_MODE != "role":
+        preferred = user_memory.get_preferred_role(uid)
+        if preferred in _PERSONA_KEYS:
+            st.session_state.selected_role = preferred
 
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown(f"## {APP_NAME}")
-    st.markdown(f"*{APP_TAGLINE}*")
+    st.title(APP_NAME)
+    st.caption(APP_TAGLINE)
     st.divider()
 
-    # User identity — display varies by IDENTITY_MODE
-    if IDENTITY_MODE == "machine":
-        st.caption(f"User: `{st.session_state.user_id}`")
+    # 3. Role selector — always visible
+    st.subheader("Your role")
+    selected_persona: str = st.selectbox(
+        "I am a...",
+        options=_PERSONA_KEYS,
+        format_func=lambda x: PERSONA_LABELS[x],
+        key="selected_role",
+        label_visibility="collapsed",
+    )
+    st.caption(_ROLE_DESCRIPTIONS.get(selected_persona, ""))
+
+    if selected_persona == "doc_generator":
+        st.info(
+            "Answers formatted as structured documentation. "
+            "Use Export to download."
+        )
+
+    st.divider()
+
+    # 5. Knowledge base stats
+    st.subheader("Knowledge base")
+    chunk_count = store.count()
+    st.metric("Chunks indexed", f"{chunk_count:,}")
+
+    db_stats = store.stats()
+    if db_stats.get("by_source"):
+        for src, cnt in sorted(db_stats["by_source"].items()):
+            st.caption(f"`{src}`: {cnt:,}")
+    else:
+        st.warning("Knowledge base is empty. Run `python ingest.py` first.")
+
+    st.divider()
+
+    # 7. Conversation memory stats
+    st.subheader("This conversation")
+    mem: SessionMemory = st.session_state.session_memory
+    turns = len(mem.turns)
+    last_topic = mem.get_last_topic() if turns else ""
+
+    st.caption(f"Questions: **{turns}**" + (f"  ·  Last: *{last_topic}*" if last_topic else ""))
+    if mem.context_summary:
+        st.caption("+ compressed earlier context")
+
+    if st.button("New conversation", use_container_width=True):
+        st.session_state.history = []
+        st.session_state.session_memory = SessionMemory(max_turns=10)
+        st.rerun()
+
+    st.divider()
+
+    # 9. User profile expander at bottom
+    uid = st.session_state.user_id
+    if uid and IDENTITY_MODE != "role":
+        with st.expander("Your profile", expanded=False):
+            stats = user_memory.get_stats(uid)
+            st.caption(f"ID: `{uid}`")
+            st.caption(f"Questions asked: **{stats['question_count']}**")
+            st.caption(f"Preferred role: `{stats['preferred_role']}`")
+            if stats.get("topics_explored"):
+                st.markdown("**Recent topics**")
+                for t in stats["topics_explored"][:5]:
+                    st.caption(f"- {t}")
     elif IDENTITY_MODE == "prompt":
         user_id_input = st.text_input(
             "Your name / ID",
-            value=st.session_state.user_id,
+            value=uid,
             placeholder="e.g. alice",
-            help="Enter your name to enable personalised memory across sessions.",
+            help="Enables personalised memory across sessions.",
         )
-        if user_id_input != st.session_state.user_id:
+        if user_id_input != uid:
             st.session_state.user_id = user_id_input
-    elif IDENTITY_MODE == "role":
-        st.caption("Tracking by role (no individual profiles)")
 
-    # User memory stats
-    if st.session_state.user_id and IDENTITY_MODE != "role":
-        stats = user_memory.get_stats(st.session_state.user_id)
-        st.caption(
-            f"Questions asked: **{stats['question_count']}** · "
-            f"Preferred role: `{stats['preferred_role']}`"
-        )
-        if stats["topics_explored"]:
-            with st.expander("Recent topics", expanded=False):
-                for t in stats["topics_explored"][:5]:
-                    st.caption(f"- {t}")
-
-    st.divider()
-
-    # Knowledge base stats
-    chunk_count = store.count()
-    st.metric("Knowledge chunks", f"{chunk_count:,}")
-
-    db_stats = store.stats()
-    if db_stats["by_source"]:
-        st.markdown("**By source**")
-        for src, cnt in sorted(db_stats["by_source"].items()):
-            st.markdown(f"- `{src}`: {cnt:,}")
-    else:
-        st.info("Knowledge base is empty. Run `python ingest.py` first.")
-
-    st.divider()
-
-    # Session memory stats
-    mem: SessionMemory = st.session_state.session_memory
-    turns_in_window = len(mem.turns)
-    has_summary = bool(mem.context_summary)
-    st.caption(
-        f"Session memory: **{turns_in_window}** turn(s) in window"
-        + (" + compressed summary" if has_summary else "")
-    )
-
-    col_clear, col_mem = st.columns(2)
-    with col_clear:
-        if st.session_state.history:
-            if st.button("Clear chat", use_container_width=True):
-                st.session_state.history = []
-                st.session_state.session_memory = SessionMemory(max_turns=10)
-                st.rerun()
-    with col_mem:
-        if turns_in_window > 0:
-            if st.button("Clear memory", use_container_width=True):
-                st.session_state.session_memory = SessionMemory(max_turns=10)
-                st.rerun()
-
-    st.divider()
-    st.caption(f"v{APP_VERSION} · Sprint 4B")
-    st.caption("LangGraph pipeline · session + user memory")
+    st.caption(f"v{APP_VERSION} · Sprint 4C")
 
 # ---------------------------------------------------------------------------
-# Main area
+# Derived vars from sidebar state
 # ---------------------------------------------------------------------------
 
-st.title(APP_NAME)
-st.caption(APP_TAGLINE)
-st.divider()
-
-# Role selector — pre-fill from user memory if we have a returning user
-_default_role_idx = 0
-if st.session_state.user_id and IDENTITY_MODE != "role":
-    preferred = user_memory.get_preferred_role(st.session_state.user_id)
-    if preferred in _PERSONA_KEYS:
-        _default_role_idx = _PERSONA_KEYS.index(preferred)
-
-col1, col2 = st.columns([2, 3])
-with col1:
-    selected_label = st.selectbox(
-        "I am a...",
-        options=_PERSONA_OPTIONS,
-        index=_default_role_idx,
-        help=(
-            "Select your role so Grokly tailors the answer to you.\n\n"
-            "Documentation mode generates export-ready structured output."
-        ),
-    )
-selected_persona = _PERSONA_KEYS[_PERSONA_OPTIONS.index(selected_label)]
-is_doc_mode = selected_persona == "doc_generator"
-
-if is_doc_mode:
-    st.info(
-        "**Documentation mode** — answers are formatted as structured documentation "
-        "ready to copy into your knowledge base or SOP. Use the Export button to download."
-    )
+selected_label: str = PERSONA_LABELS[selected_persona]
 
 # ---------------------------------------------------------------------------
-# Conversation history display
+# Render helpers
 # ---------------------------------------------------------------------------
 
 
@@ -226,35 +215,56 @@ def _render_details(entry: dict) -> None:
             st.caption("Sources: " + ", ".join(f"`{s}`" for s in sorted(sources)))
 
 
-def _render_proactive(insights: dict) -> None:
+def _render_proactive(insights: dict, role: str) -> None:
+    if _DEBUG:
+        import json
+        st.caption(
+            f"Debug: has_insights={insights.get('has_insights')}, "
+            f"suggestions={len(insights.get('related', {}).get('suggestions', []))}"
+        )
+
     if not insights.get("has_insights"):
         return
 
+    st.divider()
+    st.markdown("### 💡 You might also want to know")
+
+    # Gap alert
     gap = insights.get("gap_alert", {})
     if gap.get("triggered"):
-        st.warning(f"**{gap['message']}**")
+        st.warning(f"⚠️ {gap.get('message', '')}")
 
+    # Related suggestions
     related = insights.get("related", {})
-    if related.get("triggered"):
-        with st.expander("💡 You might also want to know", expanded=False):
-            for s in related.get("suggestions", []):
-                # Each role uses a different primary field for the display name
-                display_name = (
-                    s.get("function") or s.get("topic") or s.get("scenario") or "?"
-                )
-                label = s.get("label", s.get("type", "Related").title())
-                st.markdown(f"**{label}:** {display_name}")
-                st.caption(s.get("description", ""))
-                btn_key = f"proactive_{hash(display_name + s.get('prompt', ''))}"
-                if st.button(s["prompt"], key=btn_key):
-                    st.session_state.auto_question = s["prompt"]
-                    st.rerun()
+    suggestions = related.get("suggestions", [])
+    if suggestions:
+        for s in suggestions:
+            label = s.get("label", "Related")
+            if role == "developer":
+                display_name = s.get("function") or s.get("topic") or s.get("scenario") or "?"
+            else:
+                display_name = s.get("topic") or s.get("scenario") or s.get("function") or "?"
+            desc = s.get("description", "")
+            prompt = s.get("prompt", "")
 
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"**{label}:** {display_name}")
+                if desc:
+                    st.caption(desc[:100])
+            with col2:
+                if prompt:
+                    btn_key = f"proactive_{hash(prompt) % 100_000}"
+                    if st.button("Ask this →", key=btn_key):
+                        st.session_state.auto_question = prompt
+                        st.rerun()
+
+    # Staleness warning
     stale = insights.get("staleness", {})
     if stale.get("triggered"):
         st.info(
-            f"ℹ️ **{stale['message']}**\n\n"
-            f"To refresh: `{stale['action']}`"
+            f"ℹ️ Commentary is **{stale.get('days_old', '?')} days old**. "
+            f"Run `{stale.get('action', '')}` to refresh."
         )
 
 
@@ -273,6 +283,14 @@ def _render_export(entry: dict) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Main area — title + conversation history
+# ---------------------------------------------------------------------------
+
+st.title(APP_NAME)
+st.caption(APP_TAGLINE)
+st.divider()
+
 for entry in st.session_state.history:
     with st.chat_message("user"):
         st.markdown(f"**[{entry['persona_label']}]** {entry['query']}")
@@ -284,21 +302,19 @@ for entry in st.session_state.history:
         _render_export(entry)
 
 # ---------------------------------------------------------------------------
-# Chat input
+# Chat input — picks up proactive suggestion clicks via auto_question
 # ---------------------------------------------------------------------------
 
-query = st.chat_input(
-    placeholder="e.g. How do I submit a leave application?",
-)
+query = st.chat_input(placeholder="e.g. How do I submit a leave application?")
 
-# Pick up auto-questions set by proactive suggestion buttons
+# Pick up question set by "Ask this →" proactive buttons
 if not query and "auto_question" in st.session_state:
-    raw = st.session_state.pop("auto_question")
-    # Strip "Ask me: " button-label prefix to get the bare question
+    raw = st.session_state.auto_question
+    del st.session_state["auto_question"]
     query = raw[8:] if raw.startswith("Ask me: ") else raw
 
 if query:
-    mem: SessionMemory = st.session_state.session_memory
+    mem = st.session_state.session_memory
     uid = st.session_state.user_id or None
 
     with st.chat_message("user"):
@@ -339,6 +355,6 @@ if query:
 
         _render_details(entry)
         _render_export(entry)
-        _render_proactive(result.get("proactive_insights", {}))
+        _render_proactive(result.get("proactive_insights", {}), selected_persona)
 
     st.session_state.history.append(entry)
