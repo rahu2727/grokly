@@ -252,9 +252,12 @@ def _render_details(entry: dict) -> None:
             st.caption("Sources: " + ", ".join(f"`{s}`" for s in sorted(sources)))
 
 
-def _render_proactive(insights: dict, role: str) -> None:
+def _render_proactive(insights: dict, role: str, key_prefix: str = "") -> None:
+    print(f"[UI] proactive_insights type: {type(insights)}")
+    print(f"[UI] has_insights: {insights.get('has_insights')}")
+    print(f"[UI] suggestions: {len(insights.get('related', {}).get('suggestions', []))}")
+
     if _DEBUG:
-        import json
         st.caption(
             f"Debug: has_insights={insights.get('has_insights')}, "
             f"suggestions={len(insights.get('related', {}).get('suggestions', []))}"
@@ -268,20 +271,19 @@ def _render_proactive(insights: dict, role: str) -> None:
 
     # Gap alert
     gap = insights.get("gap_alert", {})
-    if gap.get("triggered"):
+    if gap and gap.get("triggered"):
         st.warning(f"⚠️ {gap.get('message', '')}")
 
     # Related suggestions
-    related = insights.get("related", {})
-    suggestions = related.get("suggestions", [])
+    suggestions = insights.get("related", {}).get("suggestions", [])
     if suggestions:
-        for s in suggestions:
+        for idx, s in enumerate(suggestions):
             label = s.get("label", "Related")
             if role == "developer":
                 display_name = s.get("function") or s.get("topic") or s.get("scenario") or "?"
             else:
                 display_name = s.get("topic") or s.get("scenario") or s.get("function") or "?"
-            desc = s.get("description", "")
+            desc   = s.get("description", "")
             prompt = s.get("prompt", "")
 
             col1, col2 = st.columns([3, 1])
@@ -291,14 +293,14 @@ def _render_proactive(insights: dict, role: str) -> None:
                     st.caption(desc[:100])
             with col2:
                 if prompt:
-                    btn_key = f"proactive_{hash(prompt) % 100_000}"
-                    if st.button("Ask this →", key=btn_key):
-                        st.session_state.auto_question = prompt
+                    btn_key = f"proactive_{key_prefix}{idx}_{hash(prompt) % 100_000}"
+                    if st.button("Ask this →", key=btn_key, use_container_width=True):
+                        st.session_state.pending_question = prompt
                         st.rerun()
 
     # Staleness warning
     stale = insights.get("staleness", {})
-    if stale.get("triggered"):
+    if stale and stale.get("triggered"):
         st.info(
             f"ℹ️ Commentary is **{stale.get('days_old', '?')} days old**. "
             f"Run `{stale.get('action', '')}` to refresh."
@@ -328,7 +330,7 @@ st.title(APP_NAME)
 st.caption(APP_TAGLINE)
 st.divider()
 
-for entry in st.session_state.history:
+for _i, entry in enumerate(st.session_state.history):
     with st.chat_message("user"):
         st.markdown(f"**[{entry['persona_label']}]** {entry['query']}")
 
@@ -337,6 +339,11 @@ for entry in st.session_state.history:
         _render_tool_badges(entry.get("tools_used", []))
         _render_details(entry)
         _render_export(entry)
+        _render_proactive(
+            entry.get("proactive_insights", {}),
+            entry["persona_key"],
+            key_prefix=f"h{_i}_",
+        )
 
 # ---------------------------------------------------------------------------
 # Chat input — picks up proactive suggestion clicks via auto_question
@@ -345,10 +352,9 @@ for entry in st.session_state.history:
 query = st.chat_input(placeholder="e.g. How do I submit a leave application?")
 
 # Pick up question set by "Ask this →" proactive buttons
-if not query and "auto_question" in st.session_state:
-    raw = st.session_state.auto_question
-    del st.session_state["auto_question"]
-    query = raw[8:] if raw.startswith("Ask me: ") else raw
+if not query and "pending_question" in st.session_state:
+    query = st.session_state.pending_question
+    del st.session_state["pending_question"]
 
 if query:
     mem = st.session_state.session_memory
@@ -378,20 +384,21 @@ if query:
         _render_tool_badges(tools_used)
 
         entry: dict = {
-            "query":          query,
-            "resolved_query": resolved,
-            "persona_key":    selected_persona,
-            "persona_label":  selected_label,
-            "answer":         answer,
-            "tools_used":     tools_used,
-            "confidence":     result.get("confidence",      0.0),
-            "iterations":     result.get("iteration_count", 0),
-            "quality_score":  result.get("quality_score",  0.0),
-            "sources":        result.get("sources",         []),
+            "query":              query,
+            "resolved_query":     resolved,
+            "persona_key":        selected_persona,
+            "persona_label":      selected_label,
+            "answer":             answer,
+            "tools_used":         tools_used,
+            "confidence":         result.get("confidence",       0.0),
+            "iterations":         result.get("iteration_count",  0),
+            "quality_score":      result.get("quality_score",   0.0),
+            "sources":            result.get("sources",          []),
+            "proactive_insights": result.get("proactive_insights", {}),
         }
 
         _render_details(entry)
         _render_export(entry)
-        _render_proactive(result.get("proactive_insights", {}), selected_persona)
+        _render_proactive(entry["proactive_insights"], selected_persona, key_prefix="new_")
 
     st.session_state.history.append(entry)
