@@ -14,6 +14,7 @@ import json
 import anthropic
 from dotenv import load_dotenv
 
+from grokly.model_config import get_agent_config
 from grokly.pipeline.state import GroklyState
 
 load_dotenv()
@@ -52,9 +53,10 @@ def counsel_node(state: GroklyState) -> dict:
         )
 
     # Step 1: Generate answer
+    _cfg = get_agent_config("counsel")
     answer_response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        model=_cfg["model"],
+        max_tokens=_cfg["max_tokens"],
         system=system_prompt,
         messages=[
             {
@@ -115,8 +117,9 @@ def _evaluate_quality(
     )
 
     try:
+        _rcfg = get_agent_config("counsel")
         resp = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=_rcfg["model"],
             max_tokens=128,
             system=_REFLECTION_SYSTEM,
             messages=[{"role": "user", "content": prompt}],

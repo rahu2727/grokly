@@ -15,6 +15,7 @@ import logging
 import anthropic
 from dotenv import load_dotenv
 
+from grokly.model_config import get_agent_config
 from grokly.pipeline.state import GroklyState
 from grokly.pipeline.tools import TOOL_DEFINITIONS, execute_tool
 
@@ -60,9 +61,10 @@ def tracker_node(state: GroklyState) -> dict:
         tracker_retries += 1
         iteration_count += 1
 
+        _cfg = get_agent_config("tracker")
         response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=512,
+            model=_cfg["model"],
+            max_tokens=_cfg["max_tokens"],
             system=_SYSTEM,
             tools=TOOL_DEFINITIONS,
             messages=[

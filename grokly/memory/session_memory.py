@@ -13,6 +13,8 @@ import logging
 import anthropic
 from dotenv import load_dotenv
 
+from grokly.model_config import get_agent_config
+
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -97,10 +99,11 @@ class SessionMemory:
         )
 
         try:
+            _cfg = get_agent_config("memory")
             client = anthropic.Anthropic()
             resp = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=256,
+                model=_cfg["model"],
+                max_tokens=_cfg["max_tokens"],
                 system=_RESOLVE_SYSTEM,
                 messages=[
                     {
@@ -170,10 +173,11 @@ class SessionMemory:
         )
 
         try:
+            _cfg = get_agent_config("memory")
             client = anthropic.Anthropic()
             resp = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=256,
+                model=_cfg["model"],
+                max_tokens=_cfg["max_tokens"],
                 system=_COMPRESS_SYSTEM,
                 messages=[
                     {

@@ -13,6 +13,7 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+from grokly.model_config import get_agent_config
 from grokly.pipeline.state import GroklyState
 
 load_dotenv()
@@ -49,9 +50,10 @@ def briefer_node(state: GroklyState) -> dict:
     persona = _load_persona(role)
     client = anthropic.Anthropic()
 
+    _cfg = get_agent_config("briefer")
     response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        model=_cfg["model"],
+        max_tokens=_cfg["max_tokens"],
         system=persona,
         messages=[
             {

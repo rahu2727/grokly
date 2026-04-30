@@ -29,6 +29,7 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+from grokly.model_config import get_agent_config
 from grokly.prompt_loader import PromptLoader
 from grokly.ingestion.router_agent import RouterAgent
 from grokly.store.chroma_store import ChromaStore
@@ -207,16 +208,13 @@ def _generate_commentary(
         module_name=module_label,
         function_source_code=source_code,
     )
-    settings       = prompt_loader.get_settings(prompt_name)
     prompt_version = prompt_loader.get_version(prompt_name)
-
-    model      = settings.get("model",      "claude-sonnet-4-6")
-    max_tokens = settings.get("max_tokens", 400)
+    _cfg           = get_agent_config("commentary")
 
     try:
         response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
+            model=_cfg["model"],
+            max_tokens=_cfg["max_tokens"],
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )

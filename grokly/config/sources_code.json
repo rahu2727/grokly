@@ -78,8 +78,6 @@
   ],
   "commentary_agent": {
     "enabled": true,
-    "model": "claude-sonnet-4-6",
-    "max_tokens": 400,
     "api_delay_seconds": 0.5,
     "cost_warning_threshold_usd": 5.00
   }

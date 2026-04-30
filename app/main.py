@@ -22,6 +22,7 @@ from grokly.brand import (
 )
 from grokly.memory.session_memory import SessionMemory
 from grokly.memory.user_memory import UserMemory
+from grokly.model_config import AGENT_MODEL_KEYS, get_model, print_model_summary
 from grokly.pipeline.pipeline import run as pipeline_run
 from grokly.store.chroma_store import ChromaStore
 
@@ -41,6 +42,10 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Session state initialisation
 # ---------------------------------------------------------------------------
+
+if "model_summary_shown" not in st.session_state:
+    print_model_summary()
+    st.session_state.model_summary_shown = True
 
 if "history" not in st.session_state:
     st.session_state.history: list[dict] = []
@@ -196,6 +201,17 @@ with st.sidebar:
             st.session_state.user_id = user_id_input
 
     st.caption(f"v{APP_VERSION}")
+
+    with st.expander("⚙️ Model config", expanded=False):
+        for _agent in ["counsel", "briefer", "tracker", "memory", "proactive"]:
+            _m = get_model(_agent)
+            _short = (
+                _m.replace("claude-", "")
+                  .replace("-20250514", "")
+                  .replace("-20251001", "")
+                  .replace("-4-6", " 4.6")
+            )
+            st.caption(f"{_agent}: `{_short}`")
 
 # ---------------------------------------------------------------------------
 # Derived vars from sidebar state

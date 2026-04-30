@@ -46,6 +46,5 @@ user_template: |
   Keep the total response under 200 words.
 
 settings:
-  max_tokens: 400
-  model: claude-sonnet-4-6
+  # model and max_tokens are controlled by grokly/model_config.py and .env
   temperature: 0

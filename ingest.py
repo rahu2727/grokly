@@ -29,6 +29,7 @@ import time
 
 from grokly.brand import APP_NAME, APP_VERSION
 from grokly.config_loader import ConfigLoader
+from grokly.model_config import print_model_summary
 from grokly.store.chroma_store import ChromaStore
 
 # ---------------------------------------------------------------------------
@@ -198,6 +199,7 @@ def main() -> None:
 
     print(f"{APP_NAME} v{APP_VERSION} — Ingestion Pipeline")
     print("=" * 45)
+    print_model_summary()
 
     config_loader = ConfigLoader()
 

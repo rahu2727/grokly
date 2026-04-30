@@ -93,7 +93,11 @@ class PromptLoader:
         return template.format(**kwargs)
 
     def get_settings(self, prompt_name: str) -> dict:
-        """Return the settings dict (model, max_tokens, temperature) for *prompt_name*."""
+        """Return the settings dict (temperature, etc.) for *prompt_name*.
+
+        Note: model and max_tokens are no longer stored in YAML — use
+        grokly.model_config.get_agent_config() to retrieve those.
+        """
         return self.load(prompt_name).get("settings", {})
 
     def get_version(self, prompt_name: str) -> str:

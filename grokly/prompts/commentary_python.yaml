@@ -53,6 +53,5 @@ user_template: |
   use the full limit. Simple functions should be shorter.
 
 settings:
-  max_tokens: 400
-  model: claude-sonnet-4-6
+  # model and max_tokens are controlled by grokly/model_config.py and .env
   temperature: 0

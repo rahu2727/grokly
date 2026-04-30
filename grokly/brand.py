@@ -2,6 +2,9 @@
 Brand configuration for Grokly.
 Change values here to rebrand — zero code changes needed.
 Technical package name (grokly/) never changes.
+
+Model configuration is in grokly/model_config.py and controlled via .env.
+Do not hardcode model names here.
 """
 
 APP_NAME        = "GroklyAI"
