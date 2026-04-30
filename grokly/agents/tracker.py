@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from grokly.model_config import get_agent_config
 from grokly.pipeline.state import GroklyState
 from grokly.pipeline.tools import TOOL_DEFINITIONS, execute_tool
+from grokly.store.chroma_store import ChromaStore
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,21 @@ def tracker_node(state: GroklyState) -> dict:
     if confidence >= 0.6 and not state.get("needs_reretrieval", False):
         return {"tracker_retries": tracker_retries}
 
+    # --- Fast path: reformulation + hybrid search before expensive ReAct loop ---
+    chunks, confidence = _hybrid_search(question, role, chunks)
+    if confidence >= 0.6:
+        tool_calls_made.append("tracker:hybrid_search(reformulated+original)")
+        sources = list({c["metadata"].get("source", "unknown") for c in chunks})
+        return {
+            "retrieved_chunks":     chunks,
+            "retrieval_confidence": confidence,
+            "sources":              sources,
+            "tool_calls_made":      tool_calls_made,
+            "iteration_count":      iteration_count + 1,
+            "tracker_retries":      tracker_retries,
+            "needs_reretrieval":    False,
+        }
+
     client = anthropic.Anthropic()
 
     while tracker_retries < MAX_TRACKER_ITERATIONS and confidence < 0.6:
@@ -65,6 +81,7 @@ def tracker_node(state: GroklyState) -> dict:
         response = client.messages.create(
             model=_cfg["model"],
             max_tokens=_cfg["max_tokens"],
+            temperature=_cfg["temperature"],
             system=_SYSTEM,
             tools=TOOL_DEFINITIONS,
             messages=[
@@ -165,6 +182,91 @@ def _try_web_search_via_mcp(
         logger.debug("MCP web search skipped: %s", exc)
 
     return chunks, tool_calls_made
+
+
+def _reformulate_query(question: str, role: str) -> str:
+    """
+    Rewrite the question as a documentation snippet matching the target corpus style.
+
+    This is the HDE (Hypothetical Document Embedding) pattern: converting a natural-
+    language question into a statement that resembles the text we expect to find,
+    which improves cosine similarity against the stored chunks.
+    """
+    if role == "developer":
+        instruction = (
+            "Rewrite as a technical documentation snippet about a Python function "
+            "or module. Use snake_case function names if relevant."
+        )
+    elif role in ("business_user", "manager"):
+        instruction = (
+            "Rewrite as a business process description or policy statement "
+            "from enterprise documentation."
+        )
+    elif role == "uat_tester":
+        instruction = (
+            "Rewrite as a test case description or validation rule from a test plan."
+        )
+    else:
+        instruction = "Rewrite as a factual statement from a user guide or FAQ."
+
+    try:
+        cfg = get_agent_config("tracker")
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=cfg["model"],
+            max_tokens=100,
+            temperature=0.0,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"{instruction}\n\n"
+                    f"Question: {question}\n\n"
+                    "Documentation snippet (one sentence only):"
+                ),
+            }],
+        )
+        reformulated = resp.content[0].text.strip()
+        print(f"[Tracker] Original    : {question[:60]}")
+        print(f"[Tracker] Reformulated: {reformulated[:80]}")
+        return reformulated
+    except Exception as exc:
+        logger.debug("Reformulation failed, using original: %s", exc)
+        return question
+
+
+def _hybrid_search(
+    question: str,
+    role: str,
+    existing_chunks: list[dict],
+) -> tuple[list[dict], float]:
+    """
+    Run two ChromaDB searches (reformulated + original), merge with existing chunks.
+
+    Returns (merged_chunks, new_confidence).
+    """
+    from grokly.agents.detective import _ROLE_N_RESULTS, _DEFAULT_N_RESULTS
+    n = _ROLE_N_RESULTS.get(role, _DEFAULT_N_RESULTS)
+
+    reformulated = _reformulate_query(question, role)
+    store = ChromaStore()
+
+    r_reform   = store.query(reformulated, n_results=n)
+    r_original = store.query(question,     n_results=5)
+
+    seen: set[str] = {c["text"] for c in existing_chunks}
+    merged: list[dict] = list(existing_chunks)
+    for chunk in r_reform + r_original:
+        if chunk["text"] not in seen:
+            merged.append(chunk)
+            seen.add(chunk["text"])
+
+    # Sort by distance ascending (best match first) and cap
+    merged.sort(key=lambda c: c.get("distance", 1.0))
+    merged = merged[:n]
+
+    distances = [c.get("distance", 1.0) for c in merged[:5]]
+    confidence = round(max(0.0, min(1.0, 1.0 - sum(distances) / len(distances))), 3) if distances else 0.0
+    return merged, confidence
 
 
 def _format_chunks(chunks: list[dict]) -> str:

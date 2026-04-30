@@ -57,6 +57,7 @@ def counsel_node(state: GroklyState) -> dict:
     answer_response = client.messages.create(
         model=_cfg["model"],
         max_tokens=_cfg["max_tokens"],
+        temperature=_cfg["temperature"],
         system=system_prompt,
         messages=[
             {
@@ -121,6 +122,7 @@ def _evaluate_quality(
         resp = client.messages.create(
             model=_rcfg["model"],
             max_tokens=128,
+            temperature=_rcfg["temperature"],
             system=_REFLECTION_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )

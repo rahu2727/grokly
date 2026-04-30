@@ -56,6 +56,21 @@ AGENT_MAX_TOKENS: dict[str, int] = {
     "detective":  100,   # confidence score only
 }
 
+# ── Temperature per agent ───────────────────────────────────────────────
+# 0.0 = fully deterministic (retrieval, analysis, scoring)
+# 0.1 = slight variation (Briefer: more natural language output)
+
+AGENT_TEMPERATURE: dict[str, float] = {
+    "commentary": 0.0,
+    "counsel":    0.0,
+    "tracker":    0.0,
+    "briefer":    0.1,
+    "memory":     0.0,
+    "proactive":  0.0,
+    "monitor":    0.0,
+    "detective":  0.0,
+}
+
 
 def get_model(agent_name: str) -> str:
     """
@@ -79,17 +94,27 @@ def get_max_tokens(agent_name: str) -> int:
     return AGENT_MAX_TOKENS.get(agent_name, 1000)
 
 
+def get_temperature(agent_name: str) -> float:
+    """Return the temperature setting for *agent_name* (default 0.0)."""
+    return AGENT_TEMPERATURE.get(agent_name, 0.0)
+
+
 def get_agent_config(agent_name: str) -> dict:
     """
-    Return {"model": str, "max_tokens": int, "agent": str} for *agent_name*.
+    Return {"model", "max_tokens", "temperature", "agent"} for *agent_name*.
 
         cfg = get_agent_config("counsel")
-        client.messages.create(model=cfg["model"], max_tokens=cfg["max_tokens"], ...)
+        client.messages.create(
+            model=cfg["model"],
+            max_tokens=cfg["max_tokens"],
+            temperature=cfg["temperature"],
+            ...)
     """
     return {
-        "model":      get_model(agent_name),
-        "max_tokens": get_max_tokens(agent_name),
-        "agent":      agent_name,
+        "model":       get_model(agent_name),
+        "max_tokens":  get_max_tokens(agent_name),
+        "temperature": get_temperature(agent_name),
+        "agent":       agent_name,
     }
 
 

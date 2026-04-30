@@ -104,6 +104,7 @@ class SessionMemory:
             resp = client.messages.create(
                 model=_cfg["model"],
                 max_tokens=_cfg["max_tokens"],
+                temperature=_cfg["temperature"],
                 system=_RESOLVE_SYSTEM,
                 messages=[
                     {
@@ -178,6 +179,7 @@ class SessionMemory:
             resp = client.messages.create(
                 model=_cfg["model"],
                 max_tokens=_cfg["max_tokens"],
+                temperature=_cfg["temperature"],
                 system=_COMPRESS_SYSTEM,
                 messages=[
                     {

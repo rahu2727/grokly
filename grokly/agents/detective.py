@@ -29,6 +29,13 @@ _ROLE_CHUNK_TYPE: dict[str, str | None] = {
     "consultant":    None,       # consultants benefit from mixed sources
 }
 
+# Role → number of chunks to retrieve
+_ROLE_N_RESULTS: dict[str, int] = {
+    "developer":    10,   # technical depth — needs more code/commentary chunks
+    "end_user":      5,   # simple how-to questions — fewer is faster and cleaner
+}
+_DEFAULT_N_RESULTS = 8   # all other roles
+
 # Keywords that signal an impact / dependency question → call_graph
 _IMPACT_KEYWORDS = {
     "impact", "affects", "affected", "calls", "triggers", "cascades",
@@ -41,14 +48,15 @@ def detective_node(state: GroklyState) -> dict:
     question = state["user_question"]
     role = state.get("user_role", "business_user").lower().replace(" ", "_")
 
+    n = _ROLE_N_RESULTS.get(role, _DEFAULT_N_RESULTS)
     chunk_type = _pick_chunk_type(question, role)
 
-    chunks, method = _retrieve_with_mcp_fallback(question, chunk_type, role)
+    chunks, method = _retrieve_with_mcp_fallback(question, chunk_type, role, n=n)
 
     # Supplement with unfiltered results if primary was thin
     if len(chunks) < 3:
         store = ChromaStore()
-        unfiltered = store.query(question, n_results=5)
+        unfiltered = store.query(question, n_results=n)
         seen = {c["text"] for c in chunks}
         for c in unfiltered:
             if c["text"] not in seen:
@@ -72,7 +80,7 @@ def detective_node(state: GroklyState) -> dict:
 
 
 def _retrieve_with_mcp_fallback(
-    question: str, chunk_type: str | None, role: str, n: int = 5
+    question: str, chunk_type: str | None, role: str, n: int = _DEFAULT_N_RESULTS
 ) -> tuple[list[dict], str]:
     """Try MCP knowledge_server first; fall back to direct ChromaStore."""
     try:

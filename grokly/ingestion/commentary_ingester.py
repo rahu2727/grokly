@@ -215,6 +215,7 @@ def _generate_commentary(
         response = client.messages.create(
             model=_cfg["model"],
             max_tokens=_cfg["max_tokens"],
+            temperature=_cfg["temperature"],
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
