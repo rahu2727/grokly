@@ -7,7 +7,9 @@ Run with:
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import streamlit as st
 
@@ -138,6 +140,21 @@ with st.sidebar:
         st.warning("Knowledge base empty. Run `python ingest.py` first.")
 
     st.divider()
+
+    # 6. Knowledge status — change monitor checkpoints
+    _STATE_FILE = Path(__file__).parent.parent / "grokly" / "agents" / "monitor_state.json"
+    if _STATE_FILE.exists():
+        try:
+            _monitor_state: dict = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+            if _monitor_state:
+                st.subheader("Knowledge status")
+                for _repo, _info in _monitor_state.items():
+                    _commit = _info.get("commit_hash", "?")[:8]
+                    _ts     = _info.get("updated_at", "")[:10]
+                    st.caption(f"📦 {_repo}  ·  `{_commit}`  ·  {_ts}")
+                st.divider()
+        except Exception:
+            pass
 
     # 7. Conversation memory stats
     st.subheader("This conversation")

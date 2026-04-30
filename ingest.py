@@ -14,6 +14,9 @@ Usage
     python ingest.py --view-source         # show source config and exit
     python ingest.py --source commentary --dry-run
     python ingest.py --source commentary --max-functions 20
+    python ingest.py --source monitor                    # detect + update changes
+    python ingest.py --source monitor --dry-run          # simulate, no API calls
+    python ingest.py --source monitor --auto-approve     # skip y/N prompt
 """
 
 from __future__ import annotations
@@ -39,6 +42,9 @@ _SOURCE_REGISTRY: dict[str, str] = {
     "commentary":  "grokly.ingestion.commentary_ingester",
     "call_graph":  "grokly.ingestion.call_graph_ingester",
 }
+
+# Sources handled specially (not via _SOURCE_REGISTRY)
+_SPECIAL_SOURCES = {"monitor"}
 
 # Default run excludes commentary — it calls the Claude API and incurs cost.
 _SOURCES_ALL = ["forum", "docs", "code"]
@@ -143,9 +149,15 @@ Examples:
     )
     p.add_argument(
         "--source",
-        choices=list(_SOURCE_REGISTRY.keys()),
+        choices=list(_SOURCE_REGISTRY.keys()) + list(_SPECIAL_SOURCES),
         default=None,
         help="Data source to ingest. Omit to run forum + docs + code.",
+    )
+    p.add_argument(
+        "--auto-approve",
+        action="store_true",
+        dest="auto_approve",
+        help="(monitor) Skip y/N confirmation prompt and approve all changes.",
     )
     p.add_argument(
         "--reset",
@@ -191,6 +203,13 @@ def main() -> None:
 
     if args.view_source:
         print(config_loader.summary())
+        return
+
+    # Monitor — handled separately from normal ingestion sources
+    if args.source == "monitor":
+        from grokly.agents.update_orchestrator import UpdateOrchestrator
+        orch = UpdateOrchestrator()
+        orch.run(dry_run=args.dry_run, auto_approve=args.auto_approve)
         return
 
     if args.source == "code":
