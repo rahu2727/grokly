@@ -17,7 +17,9 @@
       "Bash(.venv\\\\Scripts\\\\python.exe ingest.py --source monitor --dry-run)",
       "Bash(.venv/Scripts/python.exe -c ' *)",
       "Bash(venv/Scripts/python.exe -c ' *)",
-      "Bash(venv/Scripts/python.exe grokly/scripts/tag_existing_chunks.py --dry-run)"
+      "Bash(venv/Scripts/python.exe grokly/scripts/tag_existing_chunks.py --dry-run)",
+      "Bash(venv/Scripts/python.exe grokly/scripts/admin_cli.py add-user --email testuser@company.com --name 'Test User' --employee-id EMP999 --department Testing --role uat_tester --apps erpnext --granted-by admin@company.com)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
