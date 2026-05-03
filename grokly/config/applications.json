@@ -1,0 +1,32 @@
+{
+  "description": "Registry of applications whose knowledge is stored in GroklyAI. Add a new application by ingesting its codebase and adding an entry here.",
+  "version": "1.0",
+  "applications": [
+    {
+      "key": "erpnext",
+      "label": "ERPNext",
+      "description": "Open source ERP — HR, Payroll, Buying, Projects",
+      "type": "erp",
+      "domains": [
+        "expense claims",
+        "leave management",
+        "purchase orders",
+        "payroll",
+        "projects",
+        "timesheets",
+        "hr",
+        "salary",
+        "employee"
+      ],
+      "enabled": true,
+      "technical_prefix": "erpnext",
+      "repo_name": "erpnext_main"
+    }
+  ],
+  "routing": {
+    "business_mode": "cross_application",
+    "developer_mode": "application_specific",
+    "default_application": "erpnext",
+    "confidence_threshold_for_routing": 0.5
+  }
+}

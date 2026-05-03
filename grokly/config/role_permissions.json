@@ -1,0 +1,51 @@
+{
+  "organisation": "Default",
+  "description": "Controls which personas each organisational role can access. Edit this file to configure for your organisation. No code changes needed.",
+  "version": "1.0",
+  "role_permissions": {
+    "it_developer": {
+      "label": "IT Developer",
+      "description": "Software developers and technical architects",
+      "allowed_personas": ["developer", "uat_tester", "business_user", "manager"],
+      "default_persona": "developer",
+      "can_switch_freely": true
+    },
+    "business_analyst": {
+      "label": "Business Analyst",
+      "description": "Functional consultants and business analysts",
+      "allowed_personas": ["business_user", "manager", "uat_tester"],
+      "default_persona": "business_user",
+      "can_switch_freely": true
+    },
+    "uat_tester": {
+      "label": "UAT Tester",
+      "description": "Quality assurance and testing team members",
+      "allowed_personas": ["uat_tester", "business_user"],
+      "default_persona": "uat_tester",
+      "can_switch_freely": true
+    },
+    "manager": {
+      "label": "Manager",
+      "description": "Department managers and team leads",
+      "allowed_personas": ["manager", "business_user"],
+      "default_persona": "manager",
+      "can_switch_freely": false
+    },
+    "end_user": {
+      "label": "Staff",
+      "description": "General staff and end users of the application",
+      "allowed_personas": ["end_user"],
+      "default_persona": "end_user",
+      "can_switch_freely": false
+    },
+    "support": {
+      "label": "Support / Helpdesk",
+      "description": "IT support and helpdesk staff",
+      "allowed_personas": ["end_user", "business_user"],
+      "default_persona": "business_user",
+      "can_switch_freely": true
+    }
+  },
+  "default_org_role": "end_user",
+  "allow_self_selection": true
+}

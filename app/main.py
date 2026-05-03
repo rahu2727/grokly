@@ -20,13 +20,18 @@ from grokly.brand import (
     IDENTITY_MODE,
     PERSONA_LABELS,
 )
+from grokly.agents.application_router import ApplicationRouter
 from grokly.memory.session_memory import SessionMemory
 from grokly.memory.user_memory import UserMemory
 from grokly.model_config import AGENT_MODEL_KEYS, get_model, print_model_summary
 from grokly.pipeline.pipeline import run as pipeline_run
+from grokly.rbac import RBACManager
 from grokly.store.chroma_store import ChromaStore
 
 _DEBUG = os.getenv("GROKLY_DEBUG", "false").lower() == "true"
+
+_rbac = RBACManager()
+_app_router = ApplicationRouter()
 
 # ---------------------------------------------------------------------------
 # Page config — must be first Streamlit call
@@ -92,13 +97,19 @@ _ROLE_DESCRIPTIONS = {
     "doc_generator": "Documentation generation",
 }
 
-# Pre-fill role from user memory on first visit
+# Pre-fill org role and persona role from user memory on first visit
+if "selected_org_role" not in st.session_state:
+    st.session_state.selected_org_role = _rbac.get_default_org_role()
+
 if "selected_role" not in st.session_state:
     uid = st.session_state.user_id
+    default_persona = _rbac.get_default_persona(st.session_state.selected_org_role)
     if uid and IDENTITY_MODE != "role":
         preferred = user_memory.get_preferred_role(uid)
-        if preferred in _PERSONA_KEYS:
-            st.session_state.selected_role = preferred
+        allowed = _rbac.get_allowed_personas(st.session_state.selected_org_role)
+        if preferred in allowed:
+            default_persona = preferred
+    st.session_state.selected_role = default_persona
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -109,13 +120,40 @@ with st.sidebar:
     st.caption(APP_TAGLINE)
     st.divider()
 
-    # 3. Role selector — always visible
+    # 3. Org role selector (RBAC gate)
     st.subheader("Your role")
+    if _rbac.is_self_selection_allowed():
+        _org_role_labels = _rbac.get_org_role_labels()
+        _org_role_keys   = list(_org_role_labels.keys())
+        _cur_org_role    = st.session_state.get("selected_org_role", _rbac.get_default_org_role())
+        _cur_org_idx     = _org_role_keys.index(_cur_org_role) if _cur_org_role in _org_role_keys else 0
+        selected_org_role: str = st.selectbox(
+            "Organisation role",
+            options=_org_role_keys,
+            format_func=lambda x: _org_role_labels[x],
+            index=_cur_org_idx,
+            key="selected_org_role",
+        )
+    else:
+        selected_org_role = st.session_state.get("selected_org_role", _rbac.get_default_org_role())
+        st.caption(f"Role: **{_rbac.get_org_role_labels().get(selected_org_role, selected_org_role)}**")
+
+    # Constrain persona options to what this org role may access
+    _allowed_persona_keys = _rbac.get_allowed_personas(selected_org_role)
+    _allowed_persona_keys = [k for k in _allowed_persona_keys if k in PERSONA_LABELS]
+
+    # If current selection is no longer allowed, reset to default
+    _cur_persona = st.session_state.get("selected_role", "")
+    if _cur_persona not in _allowed_persona_keys:
+        st.session_state.selected_role = _rbac.get_default_persona(selected_org_role)
+
+    _can_switch = _rbac.can_switch_freely(selected_org_role)
     selected_persona: str = st.selectbox(
-        "I am a...",
-        options=_PERSONA_KEYS,
+        "Persona",
+        options=_allowed_persona_keys,
         format_func=lambda x: PERSONA_LABELS[x],
         key="selected_role",
+        disabled=not _can_switch and len(_allowed_persona_keys) == 1,
         label_visibility="collapsed",
     )
     st.caption(_ROLE_DESCRIPTIONS.get(selected_persona, ""))
@@ -125,6 +163,26 @@ with st.sidebar:
             "Answers formatted as structured documentation. "
             "Use Export to download."
         )
+
+    # Application selector — only for roles that do app-specific searches
+    _app_specific_personas = {"developer", "system_admin", "uat_tester"}
+    _app_labels = _app_router.get_application_labels()
+    _app_keys   = list(_app_labels.keys())
+    if selected_persona in _app_specific_personas and len(_app_keys) > 1:
+        st.divider()
+        st.subheader("Application")
+        _auto_label = "Auto-detect"
+        _app_display_keys = [""] + _app_keys
+        selected_application: str = st.selectbox(
+            "Focus on",
+            options=_app_display_keys,
+            format_func=lambda x: _auto_label if x == "" else _app_labels[x],
+            key="selected_application",
+        )
+    else:
+        selected_application = ""
+        if "selected_application" not in st.session_state:
+            st.session_state.selected_application = ""
 
     st.divider()
 
@@ -371,6 +429,7 @@ if query:
                 session_memory=mem,
                 user_memory=user_memory if uid else None,
                 user_id=uid,
+                selected_application=selected_application,
             )
 
         answer = result["answer"]
@@ -384,17 +443,18 @@ if query:
         _render_tool_badges(tools_used)
 
         entry: dict = {
-            "query":              query,
-            "resolved_query":     resolved,
-            "persona_key":        selected_persona,
-            "persona_label":      selected_label,
-            "answer":             answer,
-            "tools_used":         tools_used,
-            "confidence":         result.get("confidence",       0.0),
-            "iterations":         result.get("iteration_count",  0),
-            "quality_score":      result.get("quality_score",   0.0),
-            "sources":            result.get("sources",          []),
-            "proactive_insights": result.get("proactive_insights", {}),
+            "query":               query,
+            "resolved_query":      resolved,
+            "persona_key":         selected_persona,
+            "persona_label":       selected_label,
+            "answer":              answer,
+            "tools_used":          tools_used,
+            "confidence":          result.get("confidence",        0.0),
+            "iterations":          result.get("iteration_count",   0),
+            "quality_score":       result.get("quality_score",    0.0),
+            "sources":             result.get("sources",           []),
+            "proactive_insights":  result.get("proactive_insights", {}),
+            "application_context": result.get("application_context", {}),
         }
 
         _render_details(entry)

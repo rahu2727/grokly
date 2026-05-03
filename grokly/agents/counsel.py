@@ -51,6 +51,12 @@ def counsel_node(state: GroklyState) -> dict:
             f"base your answer on the context chunks, not this history):\n"
             f"{conversation_context}"
         )
+    app_context = state.get("application_context", {})
+    if app_context.get("search_all"):
+        system_prompt += (
+            "\n\nNote: Context was retrieved across ALL integrated applications. "
+            "If the answer spans multiple applications, make that explicit."
+        )
 
     # Step 1: Generate answer
     _cfg = get_agent_config("counsel")

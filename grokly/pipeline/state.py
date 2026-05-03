@@ -38,3 +38,10 @@ class GroklyState(TypedDict, total=False):
     resolved_question: str     # question after pronoun/reference resolution
     conversation_context: str  # compressed prior-turn context from SessionMemory
     user_profile_context: str  # personalisation hints from UserMemory (future)
+
+    # ── Multi-application routing ─────────────────────────────────────────────
+    selected_application: str   # app key chosen by user (empty = auto-detect)
+    application_context: dict   # output of ApplicationRouter.route(): search_all, application, app_label, reason
+
+    # ── Proactive suggestions ─────────────────────────────────────────────────
+    proactive_insights: dict    # {suggestions: [...], gap_alerts: [...], next_steps: [...]}

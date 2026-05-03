@@ -14,6 +14,7 @@ import logging
 
 from grokly.store.chroma_store import ChromaStore
 from grokly.pipeline.state import GroklyState
+from grokly.agents.application_router import ApplicationRouter
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +48,18 @@ def detective_node(state: GroklyState) -> dict:
     """Retrieve initial context chunks with role-aware prioritisation."""
     question = state["user_question"]
     role = state.get("user_role", "business_user").lower().replace(" ", "_")
+    selected_application = state.get("selected_application", "")
 
     n = _ROLE_N_RESULTS.get(role, _DEFAULT_N_RESULTS)
     chunk_type = _pick_chunk_type(question, role)
 
-    chunks, method = _retrieve_with_mcp_fallback(question, chunk_type, role, n=n)
+    # Determine application routing
+    router = ApplicationRouter()
+    app_context = router.route(question, role, selected_application)
+
+    chunks, method = _retrieve_with_mcp_fallback(
+        question, chunk_type, role, n=n, app_context=app_context
+    )
 
     # Supplement with unfiltered results if primary was thin
     if len(chunks) < 3:
@@ -65,7 +73,10 @@ def detective_node(state: GroklyState) -> dict:
 
     confidence = _score_confidence(chunks)
     sources = list({c["metadata"].get("source", "unknown") for c in chunks})
-    tool_log = f"detective:retrieve(role={role}, chunk_type={chunk_type or 'all'}, via={method})"
+    tool_log = (
+        f"detective:retrieve(role={role}, chunk_type={chunk_type or 'all'}, "
+        f"app={app_context.get('app_label', 'all')}, via={method})"
+    )
 
     return {
         "retrieved_chunks":    chunks,
@@ -76,13 +87,20 @@ def detective_node(state: GroklyState) -> dict:
         "iteration_count":     1,
         "tracker_retries":     0,
         "counsel_retries":     0,
+        "application_context": app_context,
     }
 
 
 def _retrieve_with_mcp_fallback(
-    question: str, chunk_type: str | None, role: str, n: int = _DEFAULT_N_RESULTS
+    question: str,
+    chunk_type: str | None,
+    role: str,
+    n: int = _DEFAULT_N_RESULTS,
+    app_context: dict | None = None,
 ) -> tuple[list[dict], str]:
     """Try MCP knowledge_server first; fall back to direct ChromaStore."""
+    app_filter = _build_app_filter(app_context)
+
     try:
         from grokly.mcp_servers.server_manager import MCPServerManager
         mgr = MCPServerManager()
@@ -112,7 +130,7 @@ def _retrieve_with_mcp_fallback(
         logger.debug("MCP unavailable, falling back to direct ChromaStore: %s", exc)
 
     store = ChromaStore()
-    chunks = _retrieve(store, question, chunk_type, n)
+    chunks = _retrieve(store, question, chunk_type, n, app_filter=app_filter)
     return chunks, "direct"
 
 
@@ -128,10 +146,32 @@ def _pick_chunk_type(question: str, role: str) -> str | None:
     return _ROLE_CHUNK_TYPE.get(role)
 
 
-def _retrieve(store: ChromaStore, query: str, chunk_type: str | None, n: int) -> list[dict]:
-    if chunk_type is None:
-        return store.query(query, n_results=n)
-    return store.query(query, n_results=n, where={"chunk_type": {"$eq": chunk_type}})
+def _build_app_filter(app_context: dict | None) -> dict | None:
+    if not app_context or app_context.get("search_all"):
+        return None
+    app_key = app_context.get("application", "")
+    return {"application": {"$eq": app_key}} if app_key else None
+
+
+def _combine_filters(f1: dict | None, f2: dict | None) -> dict | None:
+    """Combine two ChromaDB where-clauses with $and, handling None cases."""
+    if f1 and f2:
+        return {"$and": [f1, f2]}
+    return f1 or f2
+
+
+def _retrieve(
+    store: ChromaStore,
+    query: str,
+    chunk_type: str | None,
+    n: int,
+    app_filter: dict | None = None,
+) -> list[dict]:
+    type_filter = {"chunk_type": {"$eq": chunk_type}} if chunk_type else None
+    where = _combine_filters(type_filter, app_filter)
+    if where:
+        return store.query(query, n_results=n, where=where)
+    return store.query(query, n_results=n)
 
 
 def _score_confidence(chunks: list[dict]) -> float:

@@ -27,6 +27,7 @@ def run(
     session_memory=None,
     user_memory=None,
     user_id: str = None,
+    selected_application: str = "",
 ) -> dict:
     """
     Run the full Grokly agentic pipeline for a question and role.
@@ -85,6 +86,8 @@ def run(
         "iteration_count":      0,
         "tracker_retries":      0,
         "messages":             [],
+        "selected_application": selected_application,
+        "application_context":  {},
     }
 
     graph = get_graph()
@@ -109,13 +112,14 @@ def run(
     retrieved_chunks = final_state.get("retrieved_chunks", [])
 
     result = {
-        "answer":            answer,
-        "sources":           final_state.get("sources", []),
-        "confidence":        round(final_state.get("retrieval_confidence", 0.0), 3),
-        "tools_used":        final_state.get("tool_calls_made", []),
-        "iteration_count":   final_state.get("iteration_count", 0),
-        "quality_score":     round(final_state.get("quality_score", 0.0), 2),
-        "resolved_question": resolved_question,
+        "answer":              answer,
+        "sources":             final_state.get("sources", []),
+        "confidence":          round(final_state.get("retrieval_confidence", 0.0), 3),
+        "tools_used":          final_state.get("tool_calls_made", []),
+        "iteration_count":     final_state.get("iteration_count", 0),
+        "quality_score":       round(final_state.get("quality_score", 0.0), 2),
+        "resolved_question":   resolved_question,
+        "application_context": final_state.get("application_context", {}),
     }
 
     # ── Proactive insights ────────────────────────────────────────────────────
