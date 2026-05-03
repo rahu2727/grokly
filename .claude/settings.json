@@ -14,7 +14,10 @@
       "Bash(c:/Users/chaud/Documents/grokly/venv/Scripts/python.exe -c \"from grokly.memory import SessionMemory, UserMemory; print\\('imports OK'\\); m = SessionMemory\\(\\); print\\('SessionMemory max_turns=', m.max_turns\\)\")",
       "Bash(c:/Users/chaud/Documents/grokly/venv/Scripts/python.exe -c ' *)",
       "Bash(python ingest.py --source monitor --dry-run)",
-      "Bash(.venv\\\\Scripts\\\\python.exe ingest.py --source monitor --dry-run)"
+      "Bash(.venv\\\\Scripts\\\\python.exe ingest.py --source monitor --dry-run)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe grokly/scripts/tag_existing_chunks.py --dry-run)"
     ]
   }
 }
