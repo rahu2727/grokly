@@ -1,0 +1,136 @@
+{
+  "metadata": {
+    "organisation": "Your Organisation",
+    "description": "GroklyAI user master file. Update daily or when roles change. Generate from HR system or Azure AD.",
+    "file_version": "1.0",
+    "generated_date": "2026-05-03",
+    "generated_by": "manual",
+    "schema_version": "1.0",
+    "last_modified": "2026-05-03T12:46:07.850513"
+  },
+  "users": [
+    {
+      "user_id": "admin@company.com",
+      "display_name": "GroklyAI Admin",
+      "employee_id": "ADMIN001",
+      "department": "IT",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-001",
+          "grokly_role": "it_developer",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "system",
+          "start_date": "2026-01-01",
+          "end_date": null,
+          "reason": "System administrator",
+          "status": "active"
+        }
+      ],
+      "temporary_access": []
+    },
+    {
+      "user_id": "developer@company.com",
+      "display_name": "Sample Developer",
+      "employee_id": "EMP001",
+      "department": "IT",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-002",
+          "grokly_role": "it_developer",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "admin@company.com",
+          "start_date": "2026-01-01",
+          "end_date": null,
+          "reason": "IT developer permanent",
+          "status": "active"
+        }
+      ],
+      "temporary_access": []
+    },
+    {
+      "user_id": "manager@company.com",
+      "display_name": "Sample Manager",
+      "employee_id": "EMP002",
+      "department": "Finance",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-003",
+          "grokly_role": "manager",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "admin@company.com",
+          "start_date": "2026-01-01",
+          "end_date": null,
+          "reason": "Finance manager",
+          "status": "active"
+        }
+      ],
+      "temporary_access": [
+        {
+          "assignment_id": "TEMP-001",
+          "grokly_role": "it_developer",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "admin@company.com",
+          "start_date": "2026-05-01",
+          "end_date": "2026-05-31",
+          "reason": "Covering IT lead on leave",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "user_id": "enduser@company.com",
+      "display_name": "Sample End User",
+      "employee_id": "EMP003",
+      "department": "Operations",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-004",
+          "grokly_role": "end_user",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "admin@company.com",
+          "start_date": "2026-01-01",
+          "end_date": null,
+          "reason": "Operations staff",
+          "status": "active"
+        }
+      ],
+      "temporary_access": []
+    },
+    {
+      "user_id": "testuser@company.com",
+      "display_name": "Test User",
+      "employee_id": "EMP999",
+      "department": "Testing",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-9A160FA0",
+          "grokly_role": "uat_tester",
+          "application_access": [
+            "erpnext"
+          ],
+          "granted_by": "admin@company.com",
+          "start_date": "2026-05-03",
+          "end_date": null,
+          "reason": "",
+          "status": "active"
+        }
+      ],
+      "temporary_access": []
+    }
+  ]
+}

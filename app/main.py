@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -21,6 +22,7 @@ from grokly.brand import (
     PERSONA_LABELS,
 )
 from grokly.agents.application_router import ApplicationRouter
+from grokly.identity.user_manager import UserManager
 from grokly.memory.session_memory import SessionMemory
 from grokly.memory.user_memory import UserMemory
 from grokly.model_config import AGENT_MODEL_KEYS, get_model, print_model_summary
@@ -30,8 +32,9 @@ from grokly.store.chroma_store import ChromaStore
 
 _DEBUG = os.getenv("GROKLY_DEBUG", "false").lower() == "true"
 
-_rbac = RBACManager()
+_rbac     = RBACManager()
 _app_router = ApplicationRouter()
+_user_mgr = UserManager()
 
 # ---------------------------------------------------------------------------
 # Page config — must be first Streamlit call
@@ -63,6 +66,58 @@ if "user_id" not in st.session_state:
         st.session_state.user_id: str = UserMemory.get_user_id()
     else:
         st.session_state.user_id: str = ""
+
+if "authenticated_user" not in st.session_state:
+    st.session_state.authenticated_user = None
+
+# ---------------------------------------------------------------------------
+# Phase 2 login screen — shown before main app when not authenticated
+# ---------------------------------------------------------------------------
+
+if not st.session_state.authenticated_user:
+    st.title(f"🧠 {APP_NAME}")
+    st.caption("Enterprise Knowledge Assistant")
+    st.divider()
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.subheader("Sign in")
+        st.caption(
+            "Enter your work email address. "
+            "Contact your administrator if you cannot access the system."
+        )
+
+        email = st.text_input(
+            "Work email",
+            placeholder="your.name@company.com",
+            key="login_email",
+        )
+
+        if st.button("Continue", use_container_width=True, type="primary"):
+            if email:
+                auth = _user_mgr.authenticate_simple(email)
+                if auth["authenticated"]:
+                    effective_role = _user_mgr.get_effective_role(
+                        email,
+                        st.session_state.get("selected_application", "erpnext"),
+                    )
+                    st.session_state.authenticated_user = {
+                        "user_id":      email,
+                        "display_name": auth["display_name"],
+                        "department":   auth.get("department", ""),
+                        "org_role":     effective_role or "end_user",
+                        "login_time":   datetime.now().isoformat(),
+                    }
+                    # Pre-seed org_role from master file (authoritative)
+                    st.session_state.selected_org_role = effective_role or "end_user"
+                    st.session_state.user_id = email
+                    st.rerun()
+                else:
+                    st.error(f"❌ {auth['reason']}")
+            else:
+                st.warning("Please enter your email address.")
+
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Shared store and user memory (cached per session)
@@ -115,7 +170,21 @@ if "selected_role" not in st.session_state:
 # Sidebar
 # ---------------------------------------------------------------------------
 
+current_user = st.session_state.authenticated_user
+_access      = _user_mgr.get_access_summary(current_user["user_id"])
+
 with st.sidebar:
+    # Sign-out and user identity
+    _col_name, _col_out = st.columns([3, 1])
+    with _col_name:
+        st.caption(f"**{current_user['display_name']}**")
+        if _access.get("department"):
+            st.caption(_access["department"])
+    with _col_out:
+        if st.button("Sign out", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+
     st.title(APP_NAME)
     st.caption(APP_TAGLINE)
     st.divider()
