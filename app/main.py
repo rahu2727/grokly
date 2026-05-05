@@ -32,16 +32,34 @@ from grokly.store.chroma_store import ChromaStore
 
 _DEBUG = os.getenv("GROKLY_DEBUG", "false").lower() == "true"
 
-_rbac     = RBACManager()
+_rbac       = RBACManager()
 _app_router = ApplicationRouter()
-_user_mgr = UserManager()
+_user_mgr   = UserManager()
+
+# ---------------------------------------------------------------------------
+# Deployment config (populated by setup_wizard.py)
+# ---------------------------------------------------------------------------
+
+_DEPLOYMENT_PATH = Path(__file__).parent.parent / "grokly" / "config" / "deployment.json"
+
+def _load_deployment() -> dict:
+    try:
+        if _DEPLOYMENT_PATH.exists():
+            return json.loads(_DEPLOYMENT_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+_deployment     = _load_deployment()
+_org_name       = _deployment.get("organisation", "")
+_deployment_name = _deployment.get("deployment_name", "") or APP_NAME
 
 # ---------------------------------------------------------------------------
 # Page config — must be first Streamlit call
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title=APP_NAME,
+    page_title=f"GroklyAI — {_deployment_name}" if _deployment_name != APP_NAME else APP_NAME,
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -187,6 +205,10 @@ with st.sidebar:
 
     st.title(APP_NAME)
     st.caption(APP_TAGLINE)
+    if _org_name:
+        st.caption(f"🏢 {_org_name}")
+    if _deployment_name and _deployment_name != APP_NAME:
+        st.caption(f"📦 {_deployment_name}")
     st.divider()
 
     # 3. Org role selector (RBAC gate)

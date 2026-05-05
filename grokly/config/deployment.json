@@ -1,0 +1,11 @@
+{
+  "organisation": "",
+  "deployment_name": "",
+  "deployment_date": "",
+  "deployment_id": "",
+  "admin_email": "",
+  "admin_name": "",
+  "version": "0.1.0",
+  "local_only": true,
+  "setup_complete": false
+}

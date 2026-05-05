@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  groklyai:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./grokly/config:/app/grokly/config
+      - ./chroma_db:/app/chroma_db
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
