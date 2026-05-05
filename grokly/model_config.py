@@ -40,6 +40,8 @@ AGENT_MODEL_KEYS: dict[str, str] = {
     "proactive":  "GROKLY_MODEL_PROACTIVE",
     "monitor":    "GROKLY_MODEL_MONITOR",
     "detective":  "GROKLY_MODEL_DETECTIVE",
+    "screenshot": "GROKLY_MODEL_SCREENSHOT",  # Vision descriptions of screenshots
+    "recording":  "GROKLY_MODEL_RECORDING",   # Vision descriptions of video frames
 }
 
 # ── Max tokens per agent ────────────────────────────────────────────────
@@ -54,6 +56,8 @@ AGENT_MAX_TOKENS: dict[str, int] = {
     "proactive":  400,   # suggestions list
     "monitor":    300,   # change analysis
     "detective":  100,   # confidence score only
+    "screenshot": 400,   # full screenshot description (6 categories)
+    "recording":  300,   # per-frame description (2-3 sentences)
 }
 
 # ── Temperature per agent ───────────────────────────────────────────────
@@ -69,6 +73,16 @@ AGENT_TEMPERATURE: dict[str, float] = {
     "proactive":  0.0,
     "monitor":    0.0,
     "detective":  0.0,
+    "screenshot": 0.0,
+    "recording":  0.0,
+}
+
+# Default models for vision agents (overridable via .env)
+# screenshot → Sonnet for quality descriptions
+# recording  → Haiku for cost efficiency (~50 frames per 10-min video)
+_VISION_DEFAULTS: dict[str, str] = {
+    "screenshot": "claude-sonnet-4-6",
+    "recording":  "claude-haiku-4-5-20251001",
 }
 
 
@@ -76,16 +90,22 @@ def get_model(agent_name: str) -> str:
     """
     Return the model for *agent_name*.
 
-    Checks the agent-specific env var first; falls back to DEFAULT_MODEL.
+    Priority:
+      1. Agent-specific env var (e.g. GROKLY_MODEL_SCREENSHOT)
+      2. Agent-specific default in _VISION_DEFAULTS (vision agents only)
+      3. GROKLY_DEFAULT_MODEL env var
+      4. Hardcoded DEFAULT_MODEL fallback
 
-        from grokly.model_config import get_model
-        model = get_model("counsel")   # "claude-sonnet-4-6" or env override
+        model = get_model("recording")   # "claude-haiku-4-5-20251001" unless overridden
     """
     env_key = AGENT_MODEL_KEYS.get(agent_name)
     if env_key:
         override = os.getenv(env_key, "").strip()
         if override:
             return override
+    # Vision agents have their own defaults (Haiku for recordings = cost saving)
+    if agent_name in _VISION_DEFAULTS:
+        return _VISION_DEFAULTS[agent_name]
     return DEFAULT_MODEL
 
 

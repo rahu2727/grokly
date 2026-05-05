@@ -17,6 +17,13 @@ Usage
     python ingest.py --source monitor                    # detect + update changes
     python ingest.py --source monitor --dry-run          # simulate, no API calls
     python ingest.py --source monitor --auto-approve     # skip y/N prompt
+
+Multi-modal ingestion (Sprint 6):
+    python ingest.py --source screenshots --folder ./screenshots --application erpnext
+    python ingest.py --source screenshots --folder ./screenshots --dry-run
+    python ingest.py --source recordings  --folder ./recordings  --application erpnext
+    python ingest.py --source recordings  --folder ./recordings  --interval 10 --dry-run
+    python ingest.py --source recordings  --folder ./recordings  --transcribe
 """
 
 from __future__ import annotations
@@ -45,7 +52,7 @@ _SOURCE_REGISTRY: dict[str, str] = {
 }
 
 # Sources handled specially (not via _SOURCE_REGISTRY)
-_SPECIAL_SOURCES = {"monitor"}
+_SPECIAL_SOURCES = {"monitor", "screenshots", "recordings"}
 
 # Default run excludes commentary — it calls the Claude API and incurs cost.
 _SOURCES_ALL = ["forum", "docs", "code"]
@@ -150,9 +157,39 @@ Examples:
     )
     p.add_argument(
         "--source",
-        choices=list(_SOURCE_REGISTRY.keys()) + list(_SPECIAL_SOURCES),
+        choices=list(_SOURCE_REGISTRY.keys()) + sorted(_SPECIAL_SOURCES),
         default=None,
         help="Data source to ingest. Omit to run forum + docs + code.",
+    )
+    p.add_argument(
+        "--folder",
+        default=None,
+        metavar="PATH",
+        help="(screenshots/recordings) Folder containing images or video files.",
+    )
+    p.add_argument(
+        "--application",
+        default="unknown",
+        metavar="NAME",
+        help="(screenshots/recordings) Application label stored in metadata.",
+    )
+    p.add_argument(
+        "--context",
+        default="",
+        metavar="TEXT",
+        help="(screenshots/recordings) Optional context hint sent to Vision API.",
+    )
+    p.add_argument(
+        "--interval",
+        type=int,
+        default=5,
+        metavar="N",
+        help="(recordings) Extract one frame every N seconds (default: 5).",
+    )
+    p.add_argument(
+        "--transcribe",
+        action="store_true",
+        help="(recordings) Transcribe audio with Whisper (requires openai-whisper).",
     )
     p.add_argument(
         "--auto-approve",
@@ -212,6 +249,51 @@ def main() -> None:
         from grokly.agents.update_orchestrator import UpdateOrchestrator
         orch = UpdateOrchestrator()
         orch.run(dry_run=args.dry_run, auto_approve=args.auto_approve)
+        return
+
+    # Screenshots — Vision-based image ingestion
+    if args.source == "screenshots":
+        if not args.folder:
+            print("[ERROR] --folder is required for --source screenshots")
+            sys.exit(1)
+        from grokly.ingestion.screenshot_ingester import ScreenshotIngester
+        store     = _make_store()
+        ingester  = ScreenshotIngester(store)
+        result    = ingester.ingest_folder(
+            folder_path=args.folder,
+            application=args.application,
+            context_file=args.context,
+            dry_run=args.dry_run,
+        )
+        status = result.get("status")
+        if status == "complete":
+            print(f"\nIngestion complete. {result['chunks_added']} chunks added.")
+            print(f"Collection total: {store.count()} chunks")
+        elif status == "no_images":
+            print(f"\n{result['reason']}")
+        elif status == "error":
+            print(f"\n[ERROR] {result['reason']}")
+        return
+
+    # Recordings — Vision-based screen recording ingestion
+    if args.source == "recordings":
+        if not args.folder:
+            print("[ERROR] --folder is required for --source recordings")
+            sys.exit(1)
+        from grokly.ingestion.recording_ingester import RecordingIngester
+        store    = _make_store()
+        ingester = RecordingIngester(store)
+        result   = ingester.ingest_folder(
+            folder_path=args.folder,
+            application=args.application,
+            context=args.context,
+            interval_seconds=args.interval,
+            dry_run=args.dry_run,
+        )
+        if result.get("status") == "complete":
+            print(f"\nIngestion complete. {result['total_chunks']} chunks added from "
+                  f"{result['videos_processed']} video(s).")
+            print(f"Collection total: {store.count()} chunks")
         return
 
     if args.source == "code":

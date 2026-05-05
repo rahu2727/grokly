@@ -251,18 +251,28 @@ def _check_git() -> tuple[bool, str]:
     return False, "not found — code ingestion unavailable"
 
 
+def _check_opencv() -> tuple[bool, str]:
+    try:
+        import cv2
+        return True, f"cv2 {cv2.__version__}"
+    except ImportError:
+        return False, "not installed — screen recording ingestion unavailable (install opencv-python)"
+
+
 def run_system_checks() -> dict:
     print_step(1, "System Check")
 
-    py_ok,  py_msg   = _check_python()
+    py_ok,   py_msg   = _check_python()
     disk_ok, disk_msg = _check_disk()
     net_ok,  net_msg  = _check_internet()
     git_ok,  git_msg  = _check_git()
+    cv2_ok,  cv2_msg  = _check_opencv()
 
     print(_ok(f"{py_msg} — OK")           if py_ok   else _fail(f"{py_msg} — FAIL"))
     print(_ok(f"Disk space {disk_msg}")   if disk_ok else _warn(f"Disk space {disk_msg}"))
     print(_ok(f"Internet {net_msg}")      if net_ok  else _warn(f"Internet: {net_msg}"))
     print(_ok(f"Git {git_msg}")           if git_ok  else _warn(f"Git {git_msg}"))
+    print(_ok(f"OpenCV {cv2_msg}")        if cv2_ok  else _warn(f"OpenCV: {cv2_msg}"))
 
     if not py_ok:
         print(f"\n{RED}Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ is required.{RST}")
@@ -273,6 +283,7 @@ def run_system_checks() -> dict:
         "disk_ok":    disk_ok,
         "internet_ok": net_ok,
         "git_ok":     git_ok,
+        "opencv_ok":  cv2_ok,
     }
 
 
