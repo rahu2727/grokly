@@ -34,6 +34,9 @@ import inspect
 import sys
 import time
 
+from grokly.env_loader import load_environment
+load_environment()
+
 from grokly.brand import APP_NAME, APP_VERSION
 from grokly.config_loader import ConfigLoader
 from grokly.model_config import print_model_summary

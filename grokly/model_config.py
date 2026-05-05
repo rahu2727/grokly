@@ -3,14 +3,14 @@ grokly/model_config.py — Model configuration for GroklyAI.
 
 Hierarchy (each level overrides the one above):
   Level 1 — GROKLY_DEFAULT_MODEL in .env
-  Level 2 — Agent-specific env var in .env
+  Level 2 — Model alias resolution via GROKLY_ALIAS_* env vars
+  Level 3 — Agent-specific env var (legacy override)
 
-To change a model:
-  Edit .env — takes effect on next app restart.
-  No code changes ever needed.
+To change models across an environment:
+  Edit grokly/environments/<env>.env — no code changes needed.
 
 To add a new agent:
-  Add its key to AGENT_MODEL_KEYS and AGENT_MAX_TOKENS below.
+  Add its key to AGENT_MODEL_KEYS, AGENT_MAX_TOKENS, and AGENT_ALIAS_MAP.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ DEFAULT_MODEL: str = os.getenv(
     "claude-sonnet-4-6",  # fallback if env not set
 )
 
-# ── Agent model keys ────────────────────────────────────────────────────
+# ── Agent model keys (legacy per-agent overrides) ──────────────────────
 # Maps agent name → its env variable name.
-# Add new agents here as the system grows.
+# These take precedence over alias resolution.
 
 AGENT_MODEL_KEYS: dict[str, str] = {
     "commentary": "GROKLY_MODEL_COMMENTARY",
@@ -40,12 +40,11 @@ AGENT_MODEL_KEYS: dict[str, str] = {
     "proactive":  "GROKLY_MODEL_PROACTIVE",
     "monitor":    "GROKLY_MODEL_MONITOR",
     "detective":  "GROKLY_MODEL_DETECTIVE",
-    "screenshot": "GROKLY_MODEL_SCREENSHOT",  # Vision descriptions of screenshots
-    "recording":  "GROKLY_MODEL_RECORDING",   # Vision descriptions of video frames
+    "screenshot": "GROKLY_MODEL_SCREENSHOT",
+    "recording":  "GROKLY_MODEL_RECORDING",
 }
 
 # ── Max tokens per agent ────────────────────────────────────────────────
-# Tune per agent based on expected output size.
 
 AGENT_MAX_TOKENS: dict[str, int] = {
     "commentary": 400,   # function explanation
@@ -77,36 +76,79 @@ AGENT_TEMPERATURE: dict[str, float] = {
     "recording":  0.0,
 }
 
-# Default models for vision agents (overridable via .env)
-# screenshot → Sonnet for quality descriptions
-# recording  → Haiku for cost efficiency (~50 frames per 10-min video)
-_VISION_DEFAULTS: dict[str, str] = {
-    "screenshot": "claude-sonnet-4-6",
-    "recording":  "claude-haiku-4-5-20251001",
+# ── Model aliases ──────────────────────────────────────────────────────
+# Agents use aliases not model names.
+# Aliases resolve to models via .env
+# This decouples code from model choices.
+
+MODEL_ALIAS_KEYS: dict[str, str] = {
+    "quality_model":   "GROKLY_ALIAS_QUALITY_MODEL",
+    "reasoning_model": "GROKLY_ALIAS_REASONING_MODEL",
+    "fast_model":      "GROKLY_ALIAS_FAST_MODEL",
+    "balanced_model":  "GROKLY_ALIAS_BALANCED_MODEL",
 }
+
+# Default resolution if env var not set
+MODEL_ALIAS_DEFAULTS: dict[str, str] = {
+    "quality_model":   "claude-sonnet-4-20250514",
+    "reasoning_model": "claude-sonnet-4-20250514",
+    "fast_model":      "claude-haiku-4-5-20251001",
+    "balanced_model":  "claude-sonnet-4-20250514",
+}
+
+# ── Agent to alias mapping ──────────────────────────────────────────────
+# Maps each agent to the alias it should use.
+# Change the alias assignment here to change
+# which quality tier an agent uses.
+
+AGENT_ALIAS_MAP: dict[str, str] = {
+    "commentary":  "quality_model",
+    "counsel":     "reasoning_model",
+    "briefer":     "balanced_model",
+    "tracker":     "fast_model",
+    "detective":   "fast_model",
+    "memory":      "fast_model",
+    "proactive":   "fast_model",
+    "monitor":     "fast_model",
+    "screenshot":  "quality_model",
+    "recording":   "fast_model",
+}
+
+
+def resolve_alias(alias: str) -> str:
+    """
+    Resolve a model alias to a concrete model.
+
+        model = resolve_alias("reasoning_model")
+        # Returns whatever GROKLY_ALIAS_REASONING_MODEL
+        # is set to in the current .env
+    """
+    env_key = MODEL_ALIAS_KEYS.get(alias)
+    if env_key:
+        resolved = os.getenv(env_key, "").strip()
+        if resolved:
+            return resolved
+    return MODEL_ALIAS_DEFAULTS.get(alias, DEFAULT_MODEL)
 
 
 def get_model(agent_name: str) -> str:
     """
-    Return the model for *agent_name*.
-
+    Get model for an agent.
     Priority:
-      1. Agent-specific env var (e.g. GROKLY_MODEL_SCREENSHOT)
-      2. Agent-specific default in _VISION_DEFAULTS (vision agents only)
-      3. GROKLY_DEFAULT_MODEL env var
-      4. Hardcoded DEFAULT_MODEL fallback
-
-        model = get_model("recording")   # "claude-haiku-4-5-20251001" unless overridden
+      1. Agent-specific env var (legacy override)
+      2. Alias resolution via AGENT_ALIAS_MAP
+      3. DEFAULT_MODEL fallback
     """
+    # Legacy: agent-specific env var takes highest priority
     env_key = AGENT_MODEL_KEYS.get(agent_name)
     if env_key:
-        override = os.getenv(env_key, "").strip()
-        if override:
-            return override
-    # Vision agents have their own defaults (Haiku for recordings = cost saving)
-    if agent_name in _VISION_DEFAULTS:
-        return _VISION_DEFAULTS[agent_name]
-    return DEFAULT_MODEL
+        specific = os.getenv(env_key, "").strip()
+        if specific:
+            return specific
+
+    # Resolve via alias map
+    alias = AGENT_ALIAS_MAP.get(agent_name, "balanced_model")
+    return resolve_alias(alias)
 
 
 def get_max_tokens(agent_name: str) -> int:
@@ -138,23 +180,42 @@ def get_agent_config(agent_name: str) -> dict:
     }
 
 
+def get_env_label() -> str:
+    """Return current environment label."""
+    return os.getenv("GROKLY_ENV_LABEL", "Development")
+
+
+def _short(model: str) -> str:
+    return (
+        model
+        .replace("claude-", "")
+        .replace("-20250514", "")
+        .replace("-20251001", "")
+    )
+
+
 def print_model_summary() -> None:
     """Print a table of every agent's active model assignment."""
-    print("\n" + "=" * 58)
-    print("GroklyAI — Model Configuration")
-    print("=" * 58)
-    print(f"  Default model: {DEFAULT_MODEL}")
-    print()
-    print(f"  {'Agent':<14} {'Model':<36} {'Tokens':>6}")
-    print(f"  {'-'*14} {'-'*36} {'-'*6}")
+    env = get_env_label()
+    print(f"\n{'='*60}")
+    print(f"GroklyAI — Model Configuration")
+    print(f"Environment: {env}")
+    print(f"{'='*60}")
+    print(f"\n  {'Agent':<14} {'Alias':<18} {'Model':<35} {'Tokens':>6}")
+    print(f"  {'-'*14} {'-'*18} {'-'*35} {'-'*6}")
 
-    for agent in AGENT_MODEL_KEYS:
-        model   = get_model(agent)
-        tokens  = get_max_tokens(agent)
-        env_key = AGENT_MODEL_KEYS[agent]
-        marker  = "*" if os.getenv(env_key, "").strip() else " "
-        print(f"  {marker} {agent:<13} {model:<36} {tokens:>6}")
+    for agent, alias in AGENT_ALIAS_MAP.items():
+        model  = get_model(agent)
+        tokens = get_max_tokens(agent)
+        # Mark agents with legacy per-agent override
+        env_key = AGENT_MODEL_KEYS.get(agent, "")
+        marker  = "*" if env_key and os.getenv(env_key, "").strip() else " "
+        print(f"  {marker}{agent:<13} {alias:<18} {_short(model):<35} {tokens:>6}")
 
-    print()
-    print("  * = agent-specific override in .env")
-    print("=" * 58 + "\n")
+    print(f"\n  Alias resolution:")
+    for alias, env_key in MODEL_ALIAS_KEYS.items():
+        resolved = resolve_alias(alias)
+        print(f"  {alias:<20} -> {_short(resolved)}")
+
+    print(f"\n  * = agent-specific legacy override in .env")
+    print(f"{'='*60}\n")

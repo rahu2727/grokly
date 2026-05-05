@@ -12,6 +12,9 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from grokly.env_loader import load_environment
+load_environment()
+
 import streamlit as st
 
 from grokly.brand import (

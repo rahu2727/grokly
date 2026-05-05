@@ -28,6 +28,14 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 
+# Wizard always uses development environment
+os.environ.setdefault("GROKLY_ENV", "development")
+try:
+    from grokly.env_loader import load_environment
+    load_environment()
+except Exception:
+    pass  # venv may not be active yet during first-time setup
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------

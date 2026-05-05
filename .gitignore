@@ -11,4 +11,7 @@ Thumbs.db
 
 .claude/
 
-.claude/
+# Knowledge base releases and deployed copies
+releases/
+chroma_db_promoted/
+chroma_db_*_backup/
