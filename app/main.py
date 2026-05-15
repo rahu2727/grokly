@@ -92,6 +92,26 @@ if "authenticated_user" not in st.session_state:
     st.session_state.authenticated_user = None
 
 # ---------------------------------------------------------------------------
+# Dev bypass — when GROKLY_AUTH_REQUIRED=false, auto-login as developer
+# ---------------------------------------------------------------------------
+
+_AUTH_REQUIRED = os.getenv("GROKLY_AUTH_REQUIRED", "true").lower() != "false"
+
+if not _AUTH_REQUIRED and not st.session_state.authenticated_user:
+    _dev_email = os.getenv("GROKLY_DEV_USER", "admin@company.com")
+    _dev_auth  = _user_mgr.authenticate_simple(_dev_email)
+    _dev_role  = _user_mgr.get_effective_role(_dev_email, "erpnext") or "it_developer"
+    st.session_state.authenticated_user = {
+        "user_id":      _dev_email,
+        "display_name": _dev_auth.get("display_name", "Dev User"),
+        "department":   _dev_auth.get("department", "Engineering"),
+        "org_role":     _dev_role,
+        "login_time":   datetime.now().isoformat(),
+    }
+    st.session_state.selected_org_role = _dev_role
+    st.session_state.user_id = _dev_email
+
+# ---------------------------------------------------------------------------
 # Phase 2 login screen — shown before main app when not authenticated
 # ---------------------------------------------------------------------------
 

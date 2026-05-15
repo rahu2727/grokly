@@ -131,6 +131,26 @@
         }
       ],
       "temporary_access": []
+    },
+    {
+      "user_id": "chaudhary.rahul27@gmail.com",
+      "display_name": "Rahul Chaudhary",
+      "employee_id": "DEV001",
+      "department": "Engineering",
+      "account_status": "active",
+      "role_assignments": [
+        {
+          "assignment_id": "ASSIGN-RAHUL-001",
+          "grokly_role": "it_developer",
+          "application_access": ["*"],
+          "granted_by": "system",
+          "start_date": "2026-01-01",
+          "end_date": null,
+          "reason": "Project developer — full access",
+          "status": "active"
+        }
+      ],
+      "temporary_access": []
     }
   ]
 }
